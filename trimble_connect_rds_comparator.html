@@ -119,6 +119,10 @@
     </div>
   </div>
 
+  <div id="tc-status" style="margin:0 0 14px; padding:10px 12px; border:1px solid #d9dde3; border-radius:10px; background:#f7f9fc; color:#425466; font-size:12px;">
+    Kobler til Trimble Connect og leser synlige modeller…
+  </div>
+
   <div class="model-select-row">
     <div class="model-card">
       <div class="model-card-label"><span class="label-dot dot-old"></span>Eldre modellversjon</div>
@@ -188,117 +192,402 @@
 </div>
 
 <script>
-const modelMeta = [
-  { name: "Bygg-A_MEP_v1.2.ifc", date: "2024-03-15", objects: 312 },
-  { name: "Bygg-A_MEP_v1.1.ifc", date: "2024-01-08", objects: 289 },
-  { name: "Bygg-A_MEP_v1.0.ifc", date: "2023-11-20", objects: 251 },
-  { name: "Bygg-B_Strukturell_v2.0.ifc", date: "2024-02-10", objects: 178 }
-];
-
-function guid() {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-    const r = Math.random()*16|0, v = c=='x'?r:(r&0x3|0x8);
-    return v.toString(16).toUpperCase();
-  });
-}
-
-const RDS_BASE = [
-  '=AA01.AC001','=AA01.AC002','=AA01.AC003','=AA01.HV001','=AA01.HV002',
-  '=AB01.PA001','=AB01.PA002','=AB01.VT001','=AB01.VT002','=AB02.AC001',
-  '=BA01.PE001','=BA01.PE002','=BA02.PU001','=BA02.PU002','=BA02.PU003',
-  '=CA01.EL001','=CA01.EL002','=CA02.TR001','=CA02.TR002','=CA02.LY001',
-  '=DA01.IN001','=DA01.IN002','=DA01.IN003','=DA02.SE001','=DA02.SE002',
-  '=EA01.FJ001','=EA01.FJ002','=EA02.RG001','=EA02.RG002','=EA03.SP001'
-];
-
-function genData(seed, count) {
-  const rows = [];
-  for (let i = 0; i < count; i++) {
-    rows.push({ guid: guid(), rds: RDS_BASE[i % RDS_BASE.length] + (Math.floor(i/RDS_BASE.length) > 0 ? '-'+(Math.floor(i/RDS_BASE.length)+1) : '') });
-  }
-  return rows;
-}
-
+let API = null;
+let visibleModels = [];
 let allRows = [];
 let filteredRows = [];
 let currentFilter = 'all';
 let currentPage = 0;
 const PAGE_SIZE = 15;
+const PROPERTY_SET_NAME = '2_RDS';
+const PROPERTY_NAME = '01. RDS-tag';
+
+function setStatus(message, type = 'info') {
+  const el = document.getElementById('tc-status');
+  if (!el) return;
+  const styles = {
+    info:    { bg: '#f7f9fc', border: '#d9dde3', color: '#425466' },
+    success: { bg: '#eef8f1', border: '#b8dfc2', color: '#1e6a35' },
+    warn:    { bg: '#fff8e8', border: '#eed59a', color: '#8b5e00' },
+    error:   { bg: '#fff0f0', border: '#efc0c0', color: '#9b1c1c' }
+  };
+  const s = styles[type] || styles.info;
+  el.style.background = s.bg;
+  el.style.borderColor = s.border;
+  el.style.color = s.color;
+  el.textContent = message;
+}
+
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, ch => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[ch]));
+}
+
+function normalizeText(value) {
+  return String(value ?? '').trim().toLowerCase();
+}
+
+function getModelId(model) {
+  return model?.id || model?.modelId || model?.versionId || model?.fileId || null;
+}
+
+function getModelName(model) {
+  const raw =
+    model?.name ||
+    model?.displayName ||
+    model?.fileName ||
+    model?.file?.name ||
+    model?.loadedFile?.name ||
+    model?.path?.split('/').pop() ||
+    model?.fileNameWithPath?.split('/').pop() ||
+    model?.id ||
+    'Ukjent modell';
+  return String(raw);
+}
+
+function getModelDate(model) {
+  return (
+    model?.modifiedOn ||
+    model?.updatedAt ||
+    model?.lastModified ||
+    model?.createdOn ||
+    model?.file?.modifiedOn ||
+    ''
+  );
+}
+
+function formatDate(value) {
+  if (!value) return '';
+  const dt = new Date(value);
+  if (Number.isNaN(dt.getTime())) return String(value).slice(0, 10);
+  return dt.toISOString().slice(0, 10);
+}
+
+function getModelOptionById(modelId) {
+  return visibleModels.find(m => m.id === modelId) || null;
+}
+
+function populateModelSelects() {
+  const selects = [document.getElementById('sel-old'), document.getElementById('sel-new')];
+  for (const sel of selects) {
+    const prev = sel.value;
+    sel.innerHTML = '<option value="">— Velg modell —</option>';
+    visibleModels.forEach((model, idx) => {
+      const opt = document.createElement('option');
+      opt.value = model.id;
+      opt.textContent = model.name;
+      sel.appendChild(opt);
+    });
+    if (visibleModels.some(m => m.id === prev)) sel.value = prev;
+  }
+
+  updateModelInfo();
+
+  if (!visibleModels.length) {
+    setStatus('Fant ingen synlige modeller i 3D-vinduet. Slå på modellene du vil sammenligne og åpne extensionen på nytt.', 'warn');
+  } else {
+    setStatus(`Fant ${visibleModels.length} synlige modell${visibleModels.length === 1 ? '' : 'er'} i 3D-vinduet. Kun disse vises i nedtrekkslistene.`, 'success');
+  }
+}
 
 function updateModelInfo() {
   const o = document.getElementById('sel-old').value;
   const n = document.getElementById('sel-new').value;
-  if (o !== '') {
-    const m = modelMeta[+o];
-    document.getElementById('info-old').textContent = `${m.objects} IFC-objekter · ${m.date}`;
-  } else {
-    document.getElementById('info-old').textContent = '';
-  }
-  if (n !== '') {
-    const m = modelMeta[+n];
-    document.getElementById('info-new').textContent = `${m.objects} IFC-objekter · ${m.date}`;
-  } else {
-    document.getElementById('info-new').textContent = '';
-  }
+  const oldModel = getModelOptionById(o);
+  const newModel = getModelOptionById(n);
+
+  document.getElementById('info-old').textContent = oldModel
+    ? `${oldModel.objects ?? '–'} IFC-objekter${oldModel.date ? ' · ' + oldModel.date : ''}`
+    : '';
+  document.getElementById('info-new').textContent = newModel
+    ? `${newModel.objects ?? '–'} IFC-objekter${newModel.date ? ' · ' + newModel.date : ''}`
+    : '';
+
   const btn = document.getElementById('compare-btn');
-  btn.disabled = !(o !== '' && n !== '' && o !== n);
+  btn.disabled = !(o && n && o !== n);
 }
 
-function runComparison() {
-  const o = +document.getElementById('sel-old').value;
-  const n = +document.getElementById('sel-new').value;
-  const oldData = genData(o, modelMeta[o].objects);
-  const newData = genData(n, modelMeta[n].objects);
+function debounce(fn, delay = 400) {
+  let t = null;
+  return (...args) => {
+    clearTimeout(t);
+    t = setTimeout(() => fn(...args), delay);
+  };
+}
 
-  const oldMap = {};
-  oldData.forEach(r => { oldMap[r.rds] = r; });
-  const newMap = {};
-  newData.forEach(r => { newMap[r.rds] = r; });
+const refreshVisibleModelsDebounced = debounce(refreshVisibleModels, 500);
 
-  const allTags = new Set([...Object.keys(oldMap), ...Object.keys(newMap)]);
-  allRows = [];
+async function connectToTrimble() {
+  try {
+    if (!window.TrimbleConnectWorkspace || !window.TrimbleConnectWorkspace.connect) {
+      setStatus('Trimble Connect Workspace API ble ikke lastet.', 'error');
+      return;
+    }
 
-  allTags.forEach(tag => {
-    const inOld = !!oldMap[tag];
-    const inNew = !!newMap[tag];
-    let status;
-    if (inOld && inNew) status = 'same';
-    else if (!inOld && inNew) status = 'new';
-    else status = 'removed';
-    allRows.push({
-      oldGuid: inOld ? oldMap[tag].guid : null,
-      oldRds: inOld ? tag : null,
-      newGuid: inNew ? newMap[tag].guid : null,
-      newRds: inNew ? tag : null,
+    API = await window.TrimbleConnectWorkspace.connect(window.parent, (event, data) => {
+      const refreshEvents = new Set([
+        'viewer.onModelStateChanged',
+        'viewer.onPresentationChanged',
+        'viewer.onModelReset',
+        'project.onChanged',
+        'extension.command'
+      ]);
+      if (refreshEvents.has(event)) {
+        refreshVisibleModelsDebounced();
+      }
+    });
+
+    await refreshVisibleModels();
+  } catch (err) {
+    console.error(err);
+    setStatus(`Klarte ikke å koble til Trimble Connect: ${err?.message || err}`, 'error');
+  }
+}
+
+async function refreshVisibleModels() {
+  if (!API?.viewer) return;
+
+  try {
+    setStatus('Leser synlige modeller fra 3D-vinduet…', 'info');
+
+    const loadedModelsRaw = await API.viewer.getModels('loaded');
+    const loadedModels = Array.isArray(loadedModelsRaw) ? loadedModelsRaw : [];
+
+    let visibleObjectsByModel = [];
+    try {
+      const visibleResult = await API.viewer.getObjects(undefined, 'visible');
+      visibleObjectsByModel = Array.isArray(visibleResult) ? visibleResult : [];
+    } catch (err) {
+      console.warn('Kunne ikke lese visible-objekter, faller tilbake til loaded modeller.', err);
+      visibleObjectsByModel = [];
+    }
+
+    const visibleIds = new Set(
+      visibleObjectsByModel
+        .map(item => item?.modelId)
+        .filter(Boolean)
+    );
+
+    const candidates = [];
+    for (const raw of loadedModels) {
+      const id = getModelId(raw);
+      if (!id) continue;
+
+      if (visibleIds.size && !visibleIds.has(id)) {
+        continue;
+      }
+
+      let loadedFile = null;
+      try {
+        loadedFile = await API.viewer.getLoadedModel(id);
+      } catch (err) {
+        loadedFile = null;
+      }
+
+      const visibleEntry = visibleObjectsByModel.find(x => x?.modelId === id);
+      const objectCount = Array.isArray(visibleEntry?.objects)
+        ? visibleEntry.objects.length
+        : (raw?.objectsCount ?? raw?.count ?? null);
+
+      candidates.push({
+        id,
+        name: getModelName(loadedFile || raw),
+        date: formatDate(getModelDate(loadedFile || raw)),
+        objects: objectCount,
+        raw,
+        loadedFile
+      });
+    }
+
+    candidates.sort((a, b) => a.name.localeCompare(b.name, 'no'));
+    visibleModels = candidates;
+    populateModelSelects();
+  } catch (err) {
+    console.error(err);
+    visibleModels = [];
+    populateModelSelects();
+    setStatus(`Feil ved lesing av synlige modeller: ${err?.message || err}`, 'error');
+  }
+}
+
+function getPropertyValueFromSets(propertySets, targetSetName, targetPropName) {
+  const setNameNorm = normalizeText(targetSetName);
+  const propNameNorm = normalizeText(targetPropName);
+
+  for (const pset of propertySets || []) {
+    const currentSetName = normalizeText(pset?.set || pset?.name || pset?.title || '');
+    if (currentSetName !== setNameNorm) continue;
+
+    for (const prop of pset?.properties || []) {
+      const currentPropName = normalizeText(prop?.name || prop?.property || prop?.key || '');
+      if (currentPropName === propNameNorm) {
+        const v = prop?.value;
+        return v == null ? '' : String(v).trim();
+      }
+    }
+  }
+
+  return '';
+}
+
+async function readModelObjects(modelId) {
+  const all = await API.viewer.getObjects();
+  const groups = Array.isArray(all) ? all : [];
+  return groups.find(g => g?.modelId === modelId) || null;
+}
+
+async function readPropertiesInChunks(modelId, runtimeIds) {
+  const result = [];
+  const size = 200;
+
+  for (let i = 0; i < runtimeIds.length; i += size) {
+    const chunk = runtimeIds.slice(i, i + size);
+    const rows = await API.viewer.getObjectProperties(modelId, chunk);
+    if (Array.isArray(rows)) result.push(...rows);
+  }
+
+  return result;
+}
+
+async function readObjectIdsInChunks(modelId, runtimeIds) {
+  const result = [];
+  const size = 500;
+
+  for (let i = 0; i < runtimeIds.length; i += size) {
+    const chunk = runtimeIds.slice(i, i + size);
+    const ids = await API.viewer.convertToObjectIds(modelId, chunk);
+    if (Array.isArray(ids)) result.push(...ids);
+  }
+
+  return result;
+}
+
+async function collectModelRows(modelId) {
+  const group = await readModelObjects(modelId);
+  const objects = Array.isArray(group?.objects) ? group.objects : [];
+  const runtimeIds = objects.map(o => o?.id).filter(id => Number.isFinite(id));
+
+  if (!runtimeIds.length) return [];
+
+  const [propertiesRows, externalIds] = await Promise.all([
+    readPropertiesInChunks(modelId, runtimeIds),
+    readObjectIdsInChunks(modelId, runtimeIds).catch(() => runtimeIds.map(id => String(id)))
+  ]);
+
+  return propertiesRows.map((obj, index) => {
+    const guid =
+      externalIds[index] ||
+      obj?.product?.guid ||
+      obj?.product?.id ||
+      String(obj?.id || '');
+    const rds = getPropertyValueFromSets(obj?.properties, PROPERTY_SET_NAME, PROPERTY_NAME);
+
+    return {
+      guid: String(guid || '').trim(),
+      rds: String(rds || '').trim()
+    };
+  }).filter(row => row.guid || row.rds);
+}
+
+function buildComparisonRows(oldRows, newRows) {
+  const oldMap = new Map();
+  const newMap = new Map();
+
+  oldRows.forEach(r => oldMap.set(r.guid, r));
+  newRows.forEach(r => newMap.set(r.guid, r));
+
+  const allGuids = new Set([...oldMap.keys(), ...newMap.keys()]);
+  const rows = [];
+
+  for (const guid of allGuids) {
+    const oldRow = oldMap.get(guid) || null;
+    const newRow = newMap.get(guid) || null;
+
+    let status = 'same';
+    if (oldRow && !newRow) status = 'removed';
+    else if (!oldRow && newRow) status = 'new';
+    else if ((oldRow?.rds || '') !== (newRow?.rds || '')) status = 'modified';
+
+    rows.push({
+      guid,
+      oldGuid: oldRow?.guid || null,
+      oldRds: oldRow?.rds || null,
+      newGuid: newRow?.guid || null,
+      newRds: newRow?.rds || null,
       status
     });
-  });
+  }
 
-  allRows.sort((a,b) => {
-    const order = {same:0,new:1,removed:2};
-    return order[a.status]-order[b.status] || (a.oldRds||a.newRds||'').localeCompare(b.oldRds||b.newRds||'');
-  });
+  const order = { modified: 0, new: 1, removed: 2, same: 3 };
+  rows.sort((a, b) =>
+    (order[a.status] - order[b.status]) ||
+    (a.guid || '').localeCompare(b.guid || '', 'no')
+  );
 
-  const same = allRows.filter(r=>r.status==='same').length;
-  const nw = allRows.filter(r=>r.status==='new').length;
-  const rm = allRows.filter(r=>r.status==='removed').length;
-  document.getElementById('stat-total').textContent = allRows.length;
-  document.getElementById('stat-same').textContent = same;
-  document.getElementById('stat-new').textContent = nw;
-  document.getElementById('stat-removed').textContent = rm;
+  return rows;
+}
 
-  currentFilter = 'all';
-  currentPage = 0;
-  setFilter('all');
-  document.getElementById('results-section').style.display = '';
+async function runComparison() {
+  const oldModelId = document.getElementById('sel-old').value;
+  const newModelId = document.getElementById('sel-new').value;
+
+  if (!oldModelId || !newModelId || oldModelId === newModelId) {
+    setStatus('Velg to ulike synlige modeller før du kjører sammenligning.', 'warn');
+    return;
+  }
+
+  const btn = document.getElementById('compare-btn');
+  const oldBtnText = btn.textContent;
+
+  try {
+    btn.disabled = true;
+    btn.textContent = 'Leser modeller…';
+    setStatus('Henter objekter og RDS-egenskaper fra valgte modeller…', 'info');
+
+    const [oldRows, newRows] = await Promise.all([
+      collectModelRows(oldModelId),
+      collectModelRows(newModelId)
+    ]);
+
+    allRows = buildComparisonRows(oldRows, newRows);
+
+    const same = allRows.filter(r => r.status === 'same').length;
+    const modified = allRows.filter(r => r.status === 'modified').length;
+    const nw = allRows.filter(r => r.status === 'new').length;
+    const rm = allRows.filter(r => r.status === 'removed').length;
+
+    document.getElementById('stat-total').textContent = allRows.length;
+    document.getElementById('stat-same').textContent = same;
+    document.querySelector('.stat-same .stat-label').textContent = 'Uendret';
+    document.getElementById('stat-new').textContent = nw + modified;
+    document.querySelector('.stat-new .stat-label').textContent = 'Nye / endret';
+    document.getElementById('stat-removed').textContent = rm;
+
+    currentFilter = 'all';
+    currentPage = 0;
+    document.getElementById('results-section').style.display = '';
+    setFilter('all');
+
+    setStatus(
+      `Sammenligning ferdig. ${allRows.length} GUID-er kontrollert. Endret: ${modified}, nye: ${nw}, utgåtte: ${rm}, uendrede: ${same}.`,
+      'success'
+    );
+  } catch (err) {
+    console.error(err);
+    setStatus(`Feil under sammenligning: ${err?.message || err}`, 'error');
+  } finally {
+    btn.textContent = oldBtnText;
+    updateModelInfo();
+  }
 }
 
 function setFilter(f) {
   currentFilter = f;
   currentPage = 0;
   ['all','same','new','removed'].forEach(k => {
-    const btn = document.getElementById('f-'+k);
-    btn.className = 'filter-btn' + (k===f ? ' active-'+f : '');
+    const btn = document.getElementById('f-' + k);
+    btn.className = 'filter-btn' + (k === f ? ' active-' + f : '');
   });
   renderTable();
 }
@@ -306,37 +595,66 @@ function setFilter(f) {
 function renderTable() {
   const q = document.getElementById('search').value.toLowerCase();
   filteredRows = allRows.filter(r => {
-    if (currentFilter !== 'all' && r.status !== currentFilter) return false;
+    const passFilter =
+      currentFilter === 'all'
+        ? true
+        : currentFilter === 'new'
+          ? (r.status === 'new' || r.status === 'modified')
+          : r.status === currentFilter;
+
+    if (!passFilter) return false;
+
     if (q) {
-      const haystack = [(r.oldGuid||''),(r.newGuid||''),(r.oldRds||''),(r.newRds||'')].join(' ').toLowerCase();
+      const haystack = [(r.oldGuid || ''), (r.newGuid || ''), (r.oldRds || ''), (r.newRds || ''), (r.guid || '')]
+        .join(' ')
+        .toLowerCase();
       if (!haystack.includes(q)) return false;
     }
     return true;
   });
 
   const total = filteredRows.length;
-  const start = currentPage * PAGE_SIZE;
-  const page = filteredRows.slice(start, start + PAGE_SIZE);
   const tbody = document.getElementById('table-body');
 
   if (total === 0) {
     tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--color-text-secondary);font-family:var(--font-sans)">Ingen resultater</td></tr>';
-  } else {
-    tbody.innerHTML = page.map(r => {
-      const badge = r.status === 'same' ? '<span class="status-badge badge-same">Uendret</span>'
-        : r.status === 'new' ? '<span class="status-badge badge-new">Ny</span>'
-        : '<span class="status-badge badge-removed">Utgått</span>';
-      const og = r.oldGuid ? r.oldGuid.substring(0,18)+'…' : '<span class="null-val">—</span>';
-      const ng = r.newGuid ? r.newGuid.substring(0,18)+'…' : '<span class="null-val">—</span>';
-      const or = r.oldRds || '<span class="null-val">—</span>';
-      const nr = r.newRds || '<span class="null-val">—</span>';
-      return `<tr><td title="${r.oldGuid||''}">${og}</td><td>${or}</td><td>${badge}</td><td title="${r.newGuid||''}">${ng}</td><td>${nr}</td></tr>`;
-    }).join('');
+    document.getElementById('table-label').textContent = 'Ingen treff';
+    renderPagination(total);
+    return;
   }
 
-  const label = document.getElementById('table-label');
-  const filterLabels = {all:'alle',same:'uendrede',new:'nye',removed:'utgåtte'};
-  label.textContent = `Viser ${Math.min(start+1,total)}–${Math.min(start+PAGE_SIZE,total)} av ${total} ${filterLabels[currentFilter]} RDS-tags`;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  if (currentPage > totalPages - 1) currentPage = totalPages - 1;
+
+  const start = currentPage * PAGE_SIZE;
+  const page = filteredRows.slice(start, start + PAGE_SIZE);
+
+  tbody.innerHTML = page.map(r => {
+    const badge = r.status === 'same'
+      ? '<span class="status-badge badge-same">Uendret</span>'
+      : r.status === 'new'
+        ? '<span class="status-badge badge-new">Ny</span>'
+        : r.status === 'removed'
+          ? '<span class="status-badge badge-removed">Utgått</span>'
+          : '<span class="status-badge badge-modified">Endret</span>';
+
+    const og = r.oldGuid ? escapeHtml(r.oldGuid) : '<span class="null-val">—</span>';
+    const ng = r.newGuid ? escapeHtml(r.newGuid) : '<span class="null-val">—</span>';
+    const orv = r.oldRds ? escapeHtml(r.oldRds) : '<span class="null-val">—</span>';
+    const nrv = r.newRds ? escapeHtml(r.newRds) : '<span class="null-val">—</span>';
+
+    return `<tr>
+      <td title="${escapeHtml(r.oldGuid || '')}">${og}</td>
+      <td>${orv}</td>
+      <td>${badge}</td>
+      <td title="${escapeHtml(r.newGuid || '')}">${ng}</td>
+      <td>${nrv}</td>
+    </tr>`;
+  }).join('');
+
+  const filterLabels = { all: 'alle', same: 'uendrede', new: 'nye/endret', removed: 'utgåtte' };
+  document.getElementById('table-label').textContent =
+    `Viser ${start + 1}–${Math.min(start + PAGE_SIZE, total)} av ${total} ${filterLabels[currentFilter]} RDS-rader`;
 
   renderPagination(total);
 }
@@ -344,26 +662,58 @@ function renderTable() {
 function renderPagination(total) {
   const pages = Math.ceil(total / PAGE_SIZE);
   const pg = document.getElementById('pagination');
-  if (pages <= 1) { pg.innerHTML=''; return; }
-  let btns = '';
-  for (let i = 0; i < Math.min(pages,7); i++) {
-    btns += `<button class="page-btn${i===currentPage?' active':''}" onclick="goPage(${i})">${i+1}</button>`;
+  if (pages <= 1) {
+    pg.innerHTML = '';
+    return;
   }
-  if (pages > 7) btns += `<span style="padding:3px 6px;color:var(--color-text-secondary)">…${pages}</span>`;
+
+  const from = Math.max(0, currentPage - 3);
+  const to = Math.min(pages, from + 7);
+  let btns = '';
+
+  for (let i = from; i < to; i++) {
+    btns += `<button class="page-btn${i === currentPage ? ' active' : ''}" onclick="goPage(${i})">${i + 1}</button>`;
+  }
+
   pg.innerHTML = `<span>${total} rader</span><div class="page-btns">${btns}</div>`;
 }
 
-function goPage(p) { currentPage = p; renderTable(); }
+function goPage(p) {
+  currentPage = p;
+  renderTable();
+}
+
+function csvEscape(v) {
+  const s = String(v ?? '');
+  if (/[",
+]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+  return s;
+}
 
 function exportCSV() {
   const rows = filteredRows;
-  const headers = ['GUID_Eldre','RDS_tag_Eldre','Status','GUID_Ny','RDS_tag_Ny'];
-  const lines = [headers.join(','), ...rows.map(r =>
-    [r.oldGuid||'',r.oldRds||'',r.status,r.newGuid||'',r.newRds||''].join(',')
-  )];
-  const blob = new Blob([lines.join('\n')], {type:'text/csv'});
+  const headers = ['GUID_Eldre', 'RDS_tag_Eldre', 'Status', 'GUID_Ny', 'RDS_tag_Ny'];
+  const lines = [headers.join(',')];
+
+  rows.forEach(r => {
+    lines.push([
+      csvEscape(r.oldGuid || ''),
+      csvEscape(r.oldRds || ''),
+      csvEscape(r.status),
+      csvEscape(r.newGuid || ''),
+      csvEscape(r.newRds || '')
+    ].join(','));
+  });
+
+  const blob = new Blob([lines.join('
+')], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
-  const a = document.createElement('a'); a.href=url; a.download='rds_sammenligning.csv'; a.click();
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'rds_sammenligning.csv';
+  a.click();
   URL.revokeObjectURL(url);
 }
+
+window.addEventListener('load', connectToTrimble);
 </script>
