@@ -119,9 +119,7 @@
     </div>
   </div>
 
-  <div id="tc-status" style="margin:0 0 14px; padding:10px 12px; border:1px solid #d9dde3; border-radius:10px; background:#f7f9fc; color:#425466; font-size:12px;">
-    Kobler til Trimble Connect og leser synlige modeller…
-  </div>
+  <div style="display:flex; gap:8px; align-items:center; margin:0 0 14px;"><div id="tc-status" style="flex:1; padding:10px 12px; border:1px solid #d9dde3; border-radius:10px; background:#f7f9fc; color:#425466; font-size:12px;">Klargjør tilkobling mot Trimble Connect…</div><button id="refresh-models-btn" type="button" class="export-btn" onclick="refreshVisibleModels(true)">Oppdater modeller</button></div>
 
   <div class="model-select-row">
     <div class="model-card">
@@ -204,6 +202,7 @@ let filteredRows = [];
 let lastDuplicateStats = null;
 let currentFilter = 'all';
 let currentPage = 0;
+let isConnecting = false;
 const PAGE_SIZE = 15;
 const PROPERTY_SET_NAME = '2_RDS';
 const PROPERTY_NAME = '01. RDS-tag';
@@ -235,7 +234,7 @@ function normalizeText(value) {
 }
 
 function getModelId(model) {
-  return model?.id || model?.modelId || model?.versionId || model?.fileId || null;
+  return model?.id || model?.modelId || model?.versionId || model?.fileId || model?.urn || null;
 }
 
 function getModelName(model) {
@@ -279,7 +278,7 @@ function populateModelSelects() {
   for (const sel of selects) {
     const prev = sel.value;
     sel.innerHTML = '<option value="">— Velg modell —</option>';
-    visibleModels.forEach((model, idx) => {
+    visibleModels.forEach(model => {
       const opt = document.createElement('option');
       opt.value = model.id;
       opt.textContent = model.name;
@@ -287,14 +286,7 @@ function populateModelSelects() {
     });
     if (visibleModels.some(m => m.id === prev)) sel.value = prev;
   }
-
   updateModelInfo();
-
-  if (!visibleModels.length) {
-    setStatus('Fant ingen synlige modeller i 3D-vinduet. Slå på modellene du vil sammenligne og åpne extensionen på nytt.', 'warn');
-  } else {
-    setStatus(`Fant ${visibleModels.length} synlige modell${visibleModels.length === 1 ? '' : 'er'} i 3D-vinduet. Kun disse vises i nedtrekkslistene.`, 'success');
-  }
 }
 
 function updateModelInfo() {
@@ -310,68 +302,136 @@ function updateModelInfo() {
     ? `${newModel.objects ?? '–'} IFC-objekter${newModel.date ? ' · ' + newModel.date : ''}`
     : '';
 
-  const btn = document.getElementById('compare-btn');
-  btn.disabled = !(o && n && o !== n);
+  document.getElementById('compare-btn').disabled = !(o && n && o !== n);
 }
 
-function debounce(fn, delay = 400) {
+function debounce(fn, delay = 500) {
   let t = null;
   return (...args) => {
     clearTimeout(t);
     t = setTimeout(() => fn(...args), delay);
   };
 }
+const refreshVisibleModelsDebounced = debounce(() => refreshVisibleModels(false), 500);
 
-const refreshVisibleModelsDebounced = debounce(refreshVisibleModels, 500);
+function withTimeout(promise, ms, label) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(label || 'Tidsavbrudd')), ms);
+    Promise.resolve(promise)
+      .then(v => { clearTimeout(timer); resolve(v); })
+      .catch(err => { clearTimeout(timer); reject(err); });
+  });
+}
 
-async function connectToTrimble() {
-  try {
-    if (!window.TrimbleConnectWorkspace || !window.TrimbleConnectWorkspace.connect) {
-      setStatus('Trimble Connect Workspace API ble ikke lastet.', 'error');
-      return;
-    }
-
-    API = await window.TrimbleConnectWorkspace.connect(window.parent, (event, data) => {
+async function tryConnect(targetWindow) {
+  return await withTimeout(
+    window.TrimbleConnectWorkspace.connect(targetWindow, (event, data) => {
       const refreshEvents = new Set([
         'viewer.onModelStateChanged',
         'viewer.onPresentationChanged',
-        'viewer.onModelReset',
+        'viewer.onSelectionChanged',
+        'viewer.onViewChanged',
         'project.onChanged',
         'extension.command'
       ]);
-      if (refreshEvents.has(event)) {
-        refreshVisibleModelsDebounced();
-      }
-    });
+      if (refreshEvents.has(event)) refreshVisibleModelsDebounced();
+    }),
+    5000,
+    'Fikk ikke svar fra Trimble Connect'
+  );
+}
 
-    await refreshVisibleModels();
+async function ensureConnected(force = false) {
+  if (API && !force) return API;
+  if (isConnecting) return null;
+
+  isConnecting = true;
+  setStatus('Kobler til Trimble Connect…', 'info');
+
+  try {
+    if (!window.TrimbleConnectWorkspace || typeof window.TrimbleConnectWorkspace.connect !== 'function') {
+      throw new Error('Workspace API ble ikke lastet');
+    }
+
+    const targets = [];
+    if (window.parent && window.parent !== window) targets.push(window.parent);
+    if (window.opener) targets.push(window.opener);
+    targets.push(window);
+
+    let lastError = null;
+    for (const target of targets) {
+      try {
+        API = await tryConnect(target);
+        break;
+      } catch (err) {
+        lastError = err;
+      }
+    }
+
+    if (!API) throw (lastError || new Error('Ukjent tilkoblingsfeil'));
+
+    setStatus('Tilkoblet Trimble Connect. Leser modelliste…', 'success');
+    return API;
   } catch (err) {
     console.error(err);
+    API = null;
     setStatus(`Klarte ikke å koble til Trimble Connect: ${err?.message || err}`, 'error');
+    return null;
+  } finally {
+    isConnecting = false;
   }
 }
 
-async function refreshVisibleModels() {
-  if (!API?.viewer) return;
+async function getLoadedModelsSafe() {
+  if (!API?.viewer) return [];
+
+  const attempts = [
+    () => API.viewer.getModels(),
+    () => API.viewer.getModels('loaded'),
+    () => API.viewer.getModels({ loaded: true })
+  ];
+
+  for (const attempt of attempts) {
+    try {
+      const res = await attempt();
+      if (Array.isArray(res)) return res;
+      if (Array.isArray(res?.models)) return res.models;
+    } catch (err) {}
+  }
+  return [];
+}
+
+async function getVisibleGroupsSafe() {
+  if (!API?.viewer) return [];
+
+  const attempts = [
+    () => API.viewer.getObjects(undefined, 'visible'),
+    () => API.viewer.getObjects({ selector: 'visible' }),
+    () => API.viewer.getObjects()
+  ];
+
+  for (const attempt of attempts) {
+    try {
+      const res = await attempt();
+      if (Array.isArray(res)) return res;
+    } catch (err) {}
+  }
+  return [];
+}
+
+async function refreshVisibleModels(forceReconnect = false) {
+  const api = await ensureConnected(forceReconnect);
+  if (!api?.viewer) return;
 
   try {
     setStatus('Leser synlige modeller fra 3D-vinduet…', 'info');
 
-    const loadedModelsRaw = await API.viewer.getModels('loaded');
-    const loadedModels = Array.isArray(loadedModelsRaw) ? loadedModelsRaw : [];
-
-    let visibleObjectsByModel = [];
-    try {
-      const visibleResult = await API.viewer.getObjects(undefined, 'visible');
-      visibleObjectsByModel = Array.isArray(visibleResult) ? visibleResult : [];
-    } catch (err) {
-      console.warn('Kunne ikke lese visible-objekter, faller tilbake til loaded modeller.', err);
-      visibleObjectsByModel = [];
-    }
+    const loadedModels = await getLoadedModelsSafe();
+    const visibleGroups = await getVisibleGroupsSafe();
 
     const visibleIds = new Set(
-      visibleObjectsByModel
-        .map(item => item?.modelId)
+      visibleGroups
+        .map(item => item?.modelId || item?.id)
         .filter(Boolean)
     );
 
@@ -380,21 +440,19 @@ async function refreshVisibleModels() {
       const id = getModelId(raw);
       if (!id) continue;
 
-      if (visibleIds.size && !visibleIds.has(id)) {
-        continue;
-      }
+      if (visibleIds.size > 0 && !visibleIds.has(id)) continue;
 
       let loadedFile = null;
       try {
-        loadedFile = await API.viewer.getLoadedModel(id);
-      } catch (err) {
-        loadedFile = null;
-      }
+        if (typeof API.viewer.getLoadedModel === 'function') {
+          loadedFile = await API.viewer.getLoadedModel(id);
+        }
+      } catch (err) {}
 
-      const visibleEntry = visibleObjectsByModel.find(x => x?.modelId === id);
+      const visibleEntry = visibleGroups.find(x => (x?.modelId || x?.id) === id);
       const objectCount = Array.isArray(visibleEntry?.objects)
         ? visibleEntry.objects.length
-        : (raw?.objectsCount ?? raw?.count ?? null);
+        : (raw?.objectsCount ?? raw?.count ?? raw?.totalObjects ?? null);
 
       candidates.push({
         id,
@@ -406,14 +464,35 @@ async function refreshVisibleModels() {
       });
     }
 
-    candidates.sort((a, b) => a.name.localeCompare(b.name, 'no'));
-    visibleModels = candidates;
+    if (!candidates.length && loadedModels.length) {
+      // fallback: if visible filter failed, use all loaded models
+      for (const raw of loadedModels) {
+        const id = getModelId(raw);
+        if (!id) continue;
+        candidates.push({
+          id,
+          name: getModelName(raw),
+          date: formatDate(getModelDate(raw)),
+          objects: raw?.objectsCount ?? raw?.count ?? raw?.totalObjects ?? null,
+          raw
+        });
+      }
+      setStatus(`Fant ingen eksplisitt "synlig"-tilstand fra viewer. Viser ${candidates.length} lastede modeller som fallback.`, 'warn');
+    } else if (!candidates.length) {
+      setStatus('Fant ingen modeller i 3D-vinduet. Slå på modellene du vil sammenligne og trykk "Oppdater modeller".', 'warn');
+    } else {
+      setStatus(`Fant ${candidates.length} modell${candidates.length === 1 ? '' : 'er'} tilgjengelig for sammenligning.`, 'success');
+    }
+
+    const uniq = new Map();
+    candidates.forEach(m => { if (!uniq.has(m.id)) uniq.set(m.id, m); });
+    visibleModels = [...uniq.values()].sort((a, b) => a.name.localeCompare(b.name, 'no'));
     populateModelSelects();
   } catch (err) {
     console.error(err);
     visibleModels = [];
     populateModelSelects();
-    setStatus(`Feil ved lesing av synlige modeller: ${err?.message || err}`, 'error');
+    setStatus(`Feil ved lesing av modeller: ${err?.message || err}`, 'error');
   }
 }
 
@@ -433,39 +512,47 @@ function getPropertyValueFromSets(propertySets, targetSetName, targetPropName) {
       }
     }
   }
-
   return '';
 }
 
 async function readModelObjects(modelId) {
-  const all = await API.viewer.getObjects();
+  const all = await getVisibleGroupsSafe();
   const groups = Array.isArray(all) ? all : [];
-  return groups.find(g => g?.modelId === modelId) || null;
+  let group = groups.find(g => (g?.modelId || g?.id) === modelId) || null;
+  if (group) return group;
+
+  try {
+    const allAny = await API.viewer.getObjects();
+    const arr = Array.isArray(allAny) ? allAny : [];
+    return arr.find(g => (g?.modelId || g?.id) === modelId) || null;
+  } catch (err) {
+    return null;
+  }
 }
 
 async function readPropertiesInChunks(modelId, runtimeIds) {
   const result = [];
   const size = 200;
-
   for (let i = 0; i < runtimeIds.length; i += size) {
     const chunk = runtimeIds.slice(i, i + size);
     const rows = await API.viewer.getObjectProperties(modelId, chunk);
     if (Array.isArray(rows)) result.push(...rows);
   }
-
   return result;
 }
 
 async function readObjectIdsInChunks(modelId, runtimeIds) {
+  if (typeof API.viewer.convertToObjectIds !== 'function') {
+    return runtimeIds.map(id => String(id));
+  }
+
   const result = [];
   const size = 500;
-
   for (let i = 0; i < runtimeIds.length; i += size) {
     const chunk = runtimeIds.slice(i, i + size);
     const ids = await API.viewer.convertToObjectIds(modelId, chunk);
     if (Array.isArray(ids)) result.push(...ids);
   }
-
   return result;
 }
 
@@ -484,6 +571,7 @@ async function collectModelRows(modelId) {
   return propertiesRows.map((obj, index) => {
     const guid =
       externalIds[index] ||
+      obj?.guid ||
       obj?.product?.guid ||
       obj?.product?.id ||
       String(obj?.id || '');
@@ -496,16 +584,13 @@ async function collectModelRows(modelId) {
   }).filter(row => row.guid || row.rds);
 }
 
-
 function summarizeRdsCodes(rows) {
   const counts = new Map();
-
   rows.forEach(r => {
     const code = String(r?.rds || '').trim();
     if (!code) return;
     counts.set(code, (counts.get(code) || 0) + 1);
   });
-
   const duplicateCodes = [...counts.entries()]
     .filter(([, count]) => count > 1)
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'no'));
@@ -521,7 +606,6 @@ function summarizeRdsCodes(rows) {
 function buildComparisonRows(oldRows, newRows) {
   const oldMap = new Map();
   const newMap = new Map();
-
   oldRows.forEach(r => oldMap.set(r.guid, r));
   newRows.forEach(r => newMap.set(r.guid, r));
 
@@ -557,11 +641,17 @@ function buildComparisonRows(oldRows, newRows) {
 }
 
 async function runComparison() {
+  const api = await ensureConnected(false);
+  if (!api?.viewer) {
+    setStatus('Ingen aktiv tilkobling til Trimble Connect.', 'error');
+    return;
+  }
+
   const oldModelId = document.getElementById('sel-old').value;
   const newModelId = document.getElementById('sel-new').value;
 
   if (!oldModelId || !newModelId || oldModelId === newModelId) {
-    setStatus('Velg to ulike synlige modeller før du kjører sammenligning.', 'warn');
+    setStatus('Velg to ulike modeller før du kjører sammenligning.', 'warn');
     return;
   }
 
@@ -580,7 +670,6 @@ async function runComparison() {
 
     allRows = buildComparisonRows(oldRows, newRows);
 
-    const oldRdsStats = summarizeRdsCodes(oldRows);
     const newRdsStats = summarizeRdsCodes(newRows);
     lastDuplicateStats = newRdsStats;
 
@@ -743,17 +832,24 @@ function csvEscape(v) {
 }
 
 function exportCSV() {
-  const rows = filteredRows;
-  const headers = ['GUID_Eldre', 'RDS_tag_Eldre', 'Status', 'GUID_Ny', 'RDS_tag_Ny'];
+  const rows = filteredRows.length ? filteredRows : allRows;
+  const headers = ['GUID', 'RDS_Eldre_Modell', 'RDS_Ny_Modell', 'Identisk', 'Kommentar', 'Status'];
   const lines = [headers.join(',')];
 
   rows.forEach(r => {
+    const identical = r.status === 'same' ? 'Ja' : 'Nei';
+    let comment = 'Identisk i begge modeller';
+    if (r.status === 'modified') comment = 'Samme GUID, men ulik RDS-kode';
+    else if (r.status === 'new') comment = 'Finnes kun i ny modell';
+    else if (r.status === 'removed') comment = 'Finnes kun i eldre modell';
+
     lines.push([
-      csvEscape(r.oldGuid || ''),
+      csvEscape(r.guid || r.oldGuid || r.newGuid || ''),
       csvEscape(r.oldRds || ''),
-      csvEscape(r.status),
-      csvEscape(r.newGuid || ''),
-      csvEscape(r.newRds || '')
+      csvEscape(r.newRds || ''),
+      csvEscape(identical),
+      csvEscape(comment),
+      csvEscape(r.status)
     ].join(','));
   });
 
@@ -762,10 +858,12 @@ function exportCSV() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = 'rds_sammenligning.csv';
+  a.download = 'rds_guid_sammenligning.csv';
   a.click();
   URL.revokeObjectURL(url);
 }
 
-window.addEventListener('load', connectToTrimble);
+window.addEventListener('DOMContentLoaded', () => {
+  setTimeout(() => refreshVisibleModels(false), 300);
+});
 </script>
