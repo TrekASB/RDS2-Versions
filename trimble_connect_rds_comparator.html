@@ -196,13 +196,13 @@
 
 <script>
 let API = null;
+let isConnecting = false;
 let visibleModels = [];
 let allRows = [];
 let filteredRows = [];
-let lastDuplicateStats = null;
 let currentFilter = 'all';
 let currentPage = 0;
-let isConnecting = false;
+let lastDuplicateStats = null;
 const PAGE_SIZE = 15;
 const PROPERTY_SET_NAME = '2_RDS';
 const PROPERTY_NAME = '01. RDS-tag';
@@ -234,7 +234,7 @@ function normalizeText(value) {
 }
 
 function getModelId(model) {
-  return model?.id || model?.modelId || model?.versionId || model?.fileId || model?.urn || null;
+  return model?.id || model?.modelId || model?.versionId || model?.fileId || null;
 }
 
 function getModelName(model) {
@@ -252,14 +252,7 @@ function getModelName(model) {
 }
 
 function getModelDate(model) {
-  return (
-    model?.modifiedOn ||
-    model?.updatedAt ||
-    model?.lastModified ||
-    model?.createdOn ||
-    model?.file?.modifiedOn ||
-    ''
-  );
+  return model?.modifiedOn || model?.updatedAt || model?.lastModified || model?.createdOn || model?.file?.modifiedOn || '';
 }
 
 function formatDate(value) {
@@ -267,6 +260,10 @@ function formatDate(value) {
   const dt = new Date(value);
   if (Number.isNaN(dt.getTime())) return String(value).slice(0, 10);
   return dt.toISOString().slice(0, 10);
+}
+
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 function getModelOptionById(modelId) {
@@ -290,10 +287,8 @@ function populateModelSelects() {
 }
 
 function updateModelInfo() {
-  const o = document.getElementById('sel-old').value;
-  const n = document.getElementById('sel-new').value;
-  const oldModel = getModelOptionById(o);
-  const newModel = getModelOptionById(n);
+  const oldModel = getModelOptionById(document.getElementById('sel-old').value);
+  const newModel = getModelOptionById(document.getElementById('sel-new').value);
 
   document.getElementById('info-old').textContent = oldModel
     ? `${oldModel.objects ?? '–'} IFC-objekter${oldModel.date ? ' · ' + oldModel.date : ''}`
@@ -302,48 +297,14 @@ function updateModelInfo() {
     ? `${newModel.objects ?? '–'} IFC-objekter${newModel.date ? ' · ' + newModel.date : ''}`
     : '';
 
-  document.getElementById('compare-btn').disabled = !(o && n && o !== n);
-}
-
-function debounce(fn, delay = 500) {
-  let t = null;
-  return (...args) => {
-    clearTimeout(t);
-    t = setTimeout(() => fn(...args), delay);
-  };
-}
-const refreshVisibleModelsDebounced = debounce(() => refreshVisibleModels(false), 500);
-
-function withTimeout(promise, ms, label) {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(label || 'Tidsavbrudd')), ms);
-    Promise.resolve(promise)
-      .then(v => { clearTimeout(timer); resolve(v); })
-      .catch(err => { clearTimeout(timer); reject(err); });
-  });
-}
-
-async function tryConnect(targetWindow) {
-  return await withTimeout(
-    window.TrimbleConnectWorkspace.connect(targetWindow, (event, data) => {
-      const refreshEvents = new Set([
-        'viewer.onModelStateChanged',
-        'viewer.onPresentationChanged',
-        'viewer.onSelectionChanged',
-        'viewer.onViewChanged',
-        'project.onChanged',
-        'extension.command'
-      ]);
-      if (refreshEvents.has(event)) refreshVisibleModelsDebounced();
-    }),
-    5000,
-    'Fikk ikke svar fra Trimble Connect'
+  document.getElementById('compare-btn').disabled = !(
+    oldModel && newModel && oldModel.id !== newModel.id
   );
 }
 
 async function ensureConnected(force = false) {
   if (API && !force) return API;
-  if (isConnecting) return null;
+  if (isConnecting) return API;
 
   isConnecting = true;
   setStatus('Kobler til Trimble Connect…', 'info');
@@ -353,28 +314,24 @@ async function ensureConnected(force = false) {
       throw new Error('Workspace API ble ikke lastet');
     }
 
-    const targets = [];
-    if (window.parent && window.parent !== window) targets.push(window.parent);
-    if (window.opener) targets.push(window.opener);
-    targets.push(window);
-
-    let lastError = null;
-    for (const target of targets) {
-      try {
-        API = await tryConnect(target);
-        break;
-      } catch (err) {
-        lastError = err;
+    API = await window.TrimbleConnectWorkspace.connect(window.parent, (event, data) => {
+      const refreshEvents = new Set([
+        'viewer.onSelectionChanged',
+        'viewer.onModelsChanged',
+        'viewer.onPresentationChanged',
+        'viewer.onVisibilityChanged',
+        'extension.command'
+      ]);
+      if (refreshEvents.has(event)) {
+        refreshVisibleModels(false);
       }
-    }
+    }, 30000);
 
-    if (!API) throw (lastError || new Error('Ukjent tilkoblingsfeil'));
-
-    setStatus('Tilkoblet Trimble Connect. Leser modelliste…', 'success');
+    setStatus('Tilkoblet Trimble Connect. Leser modeller fra 3D-vinduet…', 'success');
     return API;
   } catch (err) {
-    console.error(err);
     API = null;
+    console.error(err);
     setStatus(`Klarte ikke å koble til Trimble Connect: ${err?.message || err}`, 'error');
     return null;
   } finally {
@@ -382,41 +339,62 @@ async function ensureConnected(force = false) {
   }
 }
 
-async function getLoadedModelsSafe() {
+async function getModelGroups(objectState) {
   if (!API?.viewer) return [];
-
-  const attempts = [
-    () => API.viewer.getModels(),
-    () => API.viewer.getModels('loaded'),
-    () => API.viewer.getModels({ loaded: true })
-  ];
-
-  for (const attempt of attempts) {
-    try {
-      const res = await attempt();
-      if (Array.isArray(res)) return res;
-      if (Array.isArray(res?.models)) return res.models;
-    } catch (err) {}
+  try {
+    const res = await API.viewer.getObjects(undefined, objectState);
+    return Array.isArray(res) ? res : [];
+  } catch (err) {
+    return [];
   }
-  return [];
 }
 
-async function getVisibleGroupsSafe() {
-  if (!API?.viewer) return [];
+async function readViewerModelListWithRetry() {
+  const maxAttempts = 12;
 
-  const attempts = [
-    () => API.viewer.getObjects(undefined, 'visible'),
-    () => API.viewer.getObjects({ selector: 'visible' }),
-    () => API.viewer.getObjects()
-  ];
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const allGroups = await getModelGroups(undefined);
+    const visibleGroups = await getModelGroups('visible');
+    const useGroups = visibleGroups.length ? visibleGroups : allGroups;
 
-  for (const attempt of attempts) {
-    try {
-      const res = await attempt();
-      if (Array.isArray(res)) return res;
-    } catch (err) {}
+    if (useGroups.length) {
+      const byId = new Map();
+
+      for (const group of useGroups) {
+        const modelId = group?.modelId || group?.id;
+        if (!modelId || byId.has(modelId)) continue;
+
+        let fileInfo = null;
+        try {
+          if (typeof API.viewer.getLoadedModel === 'function') {
+            fileInfo = await API.viewer.getLoadedModel(modelId);
+          }
+        } catch (err) {}
+
+        byId.set(modelId, {
+          id: modelId,
+          name: getModelName(fileInfo || group),
+          date: formatDate(getModelDate(fileInfo || group)),
+          objects: Array.isArray(group?.objects) ? group.objects.length : null,
+          group,
+          fileInfo
+        });
+      }
+
+      const models = [...byId.values()].sort((a, b) => a.name.localeCompare(b.name, 'no'));
+      if (models.length) {
+        const statusMsg = visibleGroups.length
+          ? `Fant ${models.length} synlige modell${models.length === 1 ? '' : 'er'} i 3D-vinduet.`
+          : `Fant ${models.length} lastede modell${models.length === 1 ? '' : 'er'} i 3D-vinduet. Synlig-filter ble ikke returnert, så lastede modeller brukes.`;
+        return { models, statusMsg, usedVisible: visibleGroups.length > 0 };
+      }
+    }
+
+    setStatus(`Leter etter modeller i 3D-vinduet… forsøk ${attempt}/${maxAttempts}`, 'info');
+    await delay(1000);
   }
-  return [];
+
+  return { models: [], statusMsg: 'Fant ingen modeller i 3D-vinduet. Kontroller at IFC-modellene er åpne og synlige, og trykk deretter "Oppdater modeller".', usedVisible: false };
 }
 
 async function refreshVisibleModels(forceReconnect = false) {
@@ -424,70 +402,16 @@ async function refreshVisibleModels(forceReconnect = false) {
   if (!api?.viewer) return;
 
   try {
-    setStatus('Leser synlige modeller fra 3D-vinduet…', 'info');
-
-    const loadedModels = await getLoadedModelsSafe();
-    const visibleGroups = await getVisibleGroupsSafe();
-
-    const visibleIds = new Set(
-      visibleGroups
-        .map(item => item?.modelId || item?.id)
-        .filter(Boolean)
-    );
-
-    const candidates = [];
-    for (const raw of loadedModels) {
-      const id = getModelId(raw);
-      if (!id) continue;
-
-      if (visibleIds.size > 0 && !visibleIds.has(id)) continue;
-
-      let loadedFile = null;
-      try {
-        if (typeof API.viewer.getLoadedModel === 'function') {
-          loadedFile = await API.viewer.getLoadedModel(id);
-        }
-      } catch (err) {}
-
-      const visibleEntry = visibleGroups.find(x => (x?.modelId || x?.id) === id);
-      const objectCount = Array.isArray(visibleEntry?.objects)
-        ? visibleEntry.objects.length
-        : (raw?.objectsCount ?? raw?.count ?? raw?.totalObjects ?? null);
-
-      candidates.push({
-        id,
-        name: getModelName(loadedFile || raw),
-        date: formatDate(getModelDate(loadedFile || raw)),
-        objects: objectCount,
-        raw,
-        loadedFile
-      });
-    }
-
-    if (!candidates.length && loadedModels.length) {
-      // fallback: if visible filter failed, use all loaded models
-      for (const raw of loadedModels) {
-        const id = getModelId(raw);
-        if (!id) continue;
-        candidates.push({
-          id,
-          name: getModelName(raw),
-          date: formatDate(getModelDate(raw)),
-          objects: raw?.objectsCount ?? raw?.count ?? raw?.totalObjects ?? null,
-          raw
-        });
-      }
-      setStatus(`Fant ingen eksplisitt "synlig"-tilstand fra viewer. Viser ${candidates.length} lastede modeller som fallback.`, 'warn');
-    } else if (!candidates.length) {
-      setStatus('Fant ingen modeller i 3D-vinduet. Slå på modellene du vil sammenligne og trykk "Oppdater modeller".', 'warn');
-    } else {
-      setStatus(`Fant ${candidates.length} modell${candidates.length === 1 ? '' : 'er'} tilgjengelig for sammenligning.`, 'success');
-    }
-
-    const uniq = new Map();
-    candidates.forEach(m => { if (!uniq.has(m.id)) uniq.set(m.id, m); });
-    visibleModels = [...uniq.values()].sort((a, b) => a.name.localeCompare(b.name, 'no'));
+    setStatus('Leser modellene som er lastet i 3D-vinduet…', 'info');
+    const result = await readViewerModelListWithRetry();
+    visibleModels = result.models;
     populateModelSelects();
+
+    if (visibleModels.length) {
+      setStatus(result.statusMsg, result.usedVisible ? 'success' : 'warn');
+    } else {
+      setStatus(result.statusMsg, 'warn');
+    }
   } catch (err) {
     console.error(err);
     visibleModels = [];
@@ -516,18 +440,8 @@ function getPropertyValueFromSets(propertySets, targetSetName, targetPropName) {
 }
 
 async function readModelObjects(modelId) {
-  const all = await getVisibleGroupsSafe();
-  const groups = Array.isArray(all) ? all : [];
-  let group = groups.find(g => (g?.modelId || g?.id) === modelId) || null;
-  if (group) return group;
-
-  try {
-    const allAny = await API.viewer.getObjects();
-    const arr = Array.isArray(allAny) ? allAny : [];
-    return arr.find(g => (g?.modelId || g?.id) === modelId) || null;
-  } catch (err) {
-    return null;
-  }
+  const allGroups = await getModelGroups(undefined);
+  return allGroups.find(g => (g?.modelId || g?.id) === modelId) || null;
 }
 
 async function readPropertiesInChunks(modelId, runtimeIds) {
@@ -568,20 +482,10 @@ async function collectModelRows(modelId) {
     readObjectIdsInChunks(modelId, runtimeIds).catch(() => runtimeIds.map(id => String(id)))
   ]);
 
-  return propertiesRows.map((obj, index) => {
-    const guid =
-      externalIds[index] ||
-      obj?.guid ||
-      obj?.product?.guid ||
-      obj?.product?.id ||
-      String(obj?.id || '');
-    const rds = getPropertyValueFromSets(obj?.properties, PROPERTY_SET_NAME, PROPERTY_NAME);
-
-    return {
-      guid: String(guid || '').trim(),
-      rds: String(rds || '').trim()
-    };
-  }).filter(row => row.guid || row.rds);
+  return propertiesRows.map((obj, index) => ({
+    guid: String(externalIds[index] || obj?.id || '').trim(),
+    rds: getPropertyValueFromSets(obj?.properties, PROPERTY_SET_NAME, PROPERTY_NAME)
+  })).filter(row => row.guid || row.rds);
 }
 
 function summarizeRdsCodes(rows) {
@@ -591,6 +495,7 @@ function summarizeRdsCodes(rows) {
     if (!code) return;
     counts.set(code, (counts.get(code) || 0) + 1);
   });
+
   const duplicateCodes = [...counts.entries()]
     .filter(([, count]) => count > 1)
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'no'));
@@ -632,11 +537,7 @@ function buildComparisonRows(oldRows, newRows) {
   }
 
   const order = { modified: 0, new: 1, removed: 2, same: 3 };
-  rows.sort((a, b) =>
-    (order[a.status] - order[b.status]) ||
-    (a.guid || '').localeCompare(b.guid || '', 'no')
-  );
-
+  rows.sort((a, b) => (order[a.status] - order[b.status]) || (a.guid || '').localeCompare(b.guid || '', 'no'));
   return rows;
 }
 
@@ -649,7 +550,6 @@ async function runComparison() {
 
   const oldModelId = document.getElementById('sel-old').value;
   const newModelId = document.getElementById('sel-new').value;
-
   if (!oldModelId || !newModelId || oldModelId === newModelId) {
     setStatus('Velg to ulike modeller før du kjører sammenligning.', 'warn');
     return;
@@ -675,7 +575,6 @@ async function runComparison() {
 
     const same = allRows.filter(r => r.status === 'same').length;
     const modified = allRows.filter(r => r.status === 'modified').length;
-    const nw = allRows.filter(r => r.status === 'new').length;
     const rm = allRows.filter(r => r.status === 'removed').length;
 
     const oldCodes = new Set(oldRows.map(r => String(r.rds || '').trim()).filter(Boolean));
@@ -690,10 +589,7 @@ async function runComparison() {
 
     const dupBox = document.getElementById('duplicate-summary');
     if (newRdsStats.duplicateCodeCount > 0) {
-      const top = newRdsStats.duplicateCodes
-        .slice(0, 8)
-        .map(([code, count]) => `${escapeHtml(code)} (${count})`)
-        .join(' · ');
+      const top = newRdsStats.duplicateCodes.slice(0, 8).map(([code, count]) => `${escapeHtml(code)} (${count})`).join(' · ');
       dupBox.style.display = '';
       dupBox.innerHTML = `<strong>Duplikater i ny modell:</strong> ${newRdsStats.duplicateCodeCount} RDS-koder forekommer mer enn én gang. ${top ? 'Mest vanlige: ' + top : ''}`;
     } else {
@@ -706,10 +602,7 @@ async function runComparison() {
     document.getElementById('results-section').style.display = '';
     setFilter('all');
 
-    setStatus(
-      `Sammenligning ferdig. ${allRows.length} GUID-er kontrollert. Nye RDS-koder: ${newCodeCount}, duplikater i ny modell: ${newRdsStats.duplicateCodeCount}, avvik fra ny versjon: ${modified}, utgåtte GUID-er: ${rm}, uendrede: ${same}.`,
-      'success'
-    );
+    setStatus(`Sammenligning ferdig. ${allRows.length} GUID-er kontrollert. Nye RDS-koder: ${newCodeCount}, duplikater i ny modell: ${newRdsStats.duplicateCodeCount}, avvik fra ny versjon: ${modified}, utgåtte GUID-er: ${rm}, uendrede: ${same}.`, 'success');
   } catch (err) {
     console.error(err);
     setStatus(`Feil under sammenligning: ${err?.message || err}`, 'error');
@@ -732,19 +625,11 @@ function setFilter(f) {
 function renderTable() {
   const q = document.getElementById('search').value.toLowerCase();
   filteredRows = allRows.filter(r => {
-    const passFilter =
-      currentFilter === 'all'
-        ? true
-        : currentFilter === 'new'
-          ? (r.status === 'new' || r.status === 'modified')
-          : r.status === currentFilter;
-
+    const passFilter = currentFilter === 'all' ? true : currentFilter === 'new' ? (r.status === 'new' || r.status === 'modified') : r.status === currentFilter;
     if (!passFilter) return false;
 
     if (q) {
-      const haystack = [(r.oldGuid || ''), (r.newGuid || ''), (r.oldRds || ''), (r.newRds || ''), (r.guid || '')]
-        .join(' ')
-        .toLowerCase();
+      const haystack = [(r.oldGuid || ''), (r.newGuid || ''), (r.oldRds || ''), (r.newRds || ''), (r.guid || '')].join(' ').toLowerCase();
       if (!haystack.includes(q)) return false;
     }
     return true;
@@ -794,8 +679,7 @@ function renderTable() {
   }).join('');
 
   const filterLabels = { all: 'alle', same: 'identiske', new: 'nye/endret', removed: 'utgåtte' };
-  document.getElementById('table-label').textContent =
-    `Viser ${start + 1}–${Math.min(start + PAGE_SIZE, total)} av ${total} ${filterLabels[currentFilter]} RDS-rader`;
+  document.getElementById('table-label').textContent = `Viser ${start + 1}–${Math.min(start + PAGE_SIZE, total)} av ${total} ${filterLabels[currentFilter]} RDS-rader`;
 
   renderPagination(total);
 }
@@ -811,11 +695,9 @@ function renderPagination(total) {
   const from = Math.max(0, currentPage - 3);
   const to = Math.min(pages, from + 7);
   let btns = '';
-
   for (let i = from; i < to; i++) {
     btns += `<button class="page-btn${i === currentPage ? ' active' : ''}" onclick="goPage(${i})">${i + 1}</button>`;
   }
-
   pg.innerHTML = `<span>${total} rader</span><div class="page-btns">${btns}</div>`;
 }
 
@@ -863,7 +745,7 @@ function exportCSV() {
   URL.revokeObjectURL(url);
 }
 
-window.addEventListener('DOMContentLoaded', () => {
-  setTimeout(() => refreshVisibleModels(false), 300);
+window.addEventListener('load', () => {
+  setTimeout(() => refreshVisibleModels(false), 1200);
 });
 </script>
