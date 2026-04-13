@@ -61,7 +61,7 @@
   .compare-btn { width: 100%; padding: 10px; background: #185FA5; color: white; border: none; border-radius: var(--border-radius-md); font-size: 13px; font-weight: 500; cursor: pointer; transition: background 0.15s; }
   .compare-btn:hover { background: #0C447C; }
   .compare-btn:disabled { background: var(--color-background-secondary); color: var(--color-text-secondary); cursor: default; }
-  .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 16px 0; }
+  .stats-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin: 16px 0; }
   .stat-card { background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 10px 12px; }
   .stat-label { font-size: 11px; color: var(--color-text-secondary); margin-bottom: 4px; }
   .stat-num { font-size: 22px; font-weight: 500; }
@@ -152,31 +152,36 @@
 
   <div id="results-section" style="margin-top:20px; display:none;">
     <div class="stats-row">
-      <div class="stat-card stat-total"><div class="stat-label">Totalt unike RDS-tags</div><div class="stat-num" id="stat-total">0</div></div>
+      <div class="stat-card stat-total"><div class="stat-label">Totalt kontrollerte GUID-er</div><div class="stat-num" id="stat-total">0</div></div>
       <div class="stat-card stat-same"><div class="stat-label">Uendret</div><div class="stat-num" id="stat-same">0</div></div>
-      <div class="stat-card stat-new"><div class="stat-label">Nye tags (NY)</div><div class="stat-num" id="stat-new">0</div></div>
-      <div class="stat-card stat-removed"><div class="stat-label">Utgåtte tags</div><div class="stat-num" id="stat-removed">0</div></div>
+      <div class="stat-card stat-new"><div class="stat-label">Nye RDS-koder</div><div class="stat-num" id="stat-new-codes">0</div></div>
+      <div class="stat-card stat-new"><div class="stat-label">Duplikater i ny modell</div><div class="stat-num" id="stat-duplicates">0</div></div>
+      <div class="stat-card stat-removed"><div class="stat-label">Avvik fra ny versjon</div><div class="stat-num" id="stat-deviations">0</div></div>
     </div>
 
+
+    <div id="duplicate-summary" style="display:none; margin-bottom:12px; padding:10px 12px; border:1px solid #eed59a; border-radius:10px; background:#fff8e8; color:#8b5e00; font-size:12px;"></div>
+
     <div class="filter-row">
+
       <button class="filter-btn active-all" id="f-all" onclick="setFilter('all')">Alle</button>
       <button class="filter-btn" id="f-same" onclick="setFilter('same')">Uendret</button>
       <button class="filter-btn" id="f-new" onclick="setFilter('new')">Ny</button>
       <button class="filter-btn" id="f-removed" onclick="setFilter('removed')">Utgått</button>
       <input class="search-input" id="search" type="text" placeholder="Søk GUID eller RDS-tag..." oninput="renderTable()" />
-      <button class="export-btn" onclick="exportCSV()">↓ CSV</button>
+      <button class="export-btn" onclick="exportCSV()">↓ Eksporter CSV</button>
     </div>
 
-    <div class="section-title" id="table-label">Viser alle</div>
+    <div class="section-title" id="table-label">Helhetlig GUID/RDS-sammenligning</div>
     <div class="table-wrap">
       <table>
         <thead>
           <tr>
-            <th class="col-guid">GUID (eldre)</th>
-            <th class="col-rds">RDS-tag (eldre)</th>
-            <th class="col-status">Status</th>
-            <th class="col-guid2">GUID (ny)</th>
-            <th class="col-rds2">RDS-tag (ny)</th>
+            <th class="col-guid">GUID</th>
+            <th class="col-rds">RDS-kode eldre modell</th>
+            <th class="col-status">Lik?</th>
+            <th class="col-rds2">RDS-kode ny modell</th>
+            <th class="col-guid2">Kommentar</th>
           </tr>
         </thead>
         <tbody id="table-body"></tbody>
@@ -196,6 +201,7 @@ let API = null;
 let visibleModels = [];
 let allRows = [];
 let filteredRows = [];
+let lastDuplicateStats = null;
 let currentFilter = 'all';
 let currentPage = 0;
 const PAGE_SIZE = 15;
@@ -490,6 +496,28 @@ async function collectModelRows(modelId) {
   }).filter(row => row.guid || row.rds);
 }
 
+
+function summarizeRdsCodes(rows) {
+  const counts = new Map();
+
+  rows.forEach(r => {
+    const code = String(r?.rds || '').trim();
+    if (!code) return;
+    counts.set(code, (counts.get(code) || 0) + 1);
+  });
+
+  const duplicateCodes = [...counts.entries()]
+    .filter(([, count]) => count > 1)
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'no'));
+
+  return {
+    uniqueCount: counts.size,
+    duplicateCodeCount: duplicateCodes.length,
+    duplicateObjectCount: duplicateCodes.reduce((sum, [, count]) => sum + count, 0),
+    duplicateCodes
+  };
+}
+
 function buildComparisonRows(oldRows, newRows) {
   const oldMap = new Map();
   const newMap = new Map();
@@ -552,17 +580,37 @@ async function runComparison() {
 
     allRows = buildComparisonRows(oldRows, newRows);
 
+    const oldRdsStats = summarizeRdsCodes(oldRows);
+    const newRdsStats = summarizeRdsCodes(newRows);
+    lastDuplicateStats = newRdsStats;
+
     const same = allRows.filter(r => r.status === 'same').length;
     const modified = allRows.filter(r => r.status === 'modified').length;
     const nw = allRows.filter(r => r.status === 'new').length;
     const rm = allRows.filter(r => r.status === 'removed').length;
 
+    const oldCodes = new Set(oldRows.map(r => String(r.rds || '').trim()).filter(Boolean));
+    const newCodes = new Set(newRows.map(r => String(r.rds || '').trim()).filter(Boolean));
+    const newCodeCount = [...newCodes].filter(code => !oldCodes.has(code)).length;
+
     document.getElementById('stat-total').textContent = allRows.length;
     document.getElementById('stat-same').textContent = same;
-    document.querySelector('.stat-same .stat-label').textContent = 'Uendret';
-    document.getElementById('stat-new').textContent = nw + modified;
-    document.querySelector('.stat-new .stat-label').textContent = 'Nye / endret';
-    document.getElementById('stat-removed').textContent = rm;
+    document.getElementById('stat-new-codes').textContent = newCodeCount;
+    document.getElementById('stat-duplicates').textContent = newRdsStats.duplicateCodeCount;
+    document.getElementById('stat-deviations').textContent = modified;
+
+    const dupBox = document.getElementById('duplicate-summary');
+    if (newRdsStats.duplicateCodeCount > 0) {
+      const top = newRdsStats.duplicateCodes
+        .slice(0, 8)
+        .map(([code, count]) => `${escapeHtml(code)} (${count})`)
+        .join(' · ');
+      dupBox.style.display = '';
+      dupBox.innerHTML = `<strong>Duplikater i ny modell:</strong> ${newRdsStats.duplicateCodeCount} RDS-koder forekommer mer enn én gang. ${top ? 'Mest vanlige: ' + top : ''}`;
+    } else {
+      dupBox.style.display = '';
+      dupBox.innerHTML = '<strong>Duplikater i ny modell:</strong> Ingen duplikate RDS-koder funnet.';
+    }
 
     currentFilter = 'all';
     currentPage = 0;
@@ -570,7 +618,7 @@ async function runComparison() {
     setFilter('all');
 
     setStatus(
-      `Sammenligning ferdig. ${allRows.length} GUID-er kontrollert. Endret: ${modified}, nye: ${nw}, utgåtte: ${rm}, uendrede: ${same}.`,
+      `Sammenligning ferdig. ${allRows.length} GUID-er kontrollert. Nye RDS-koder: ${newCodeCount}, duplikater i ny modell: ${newRdsStats.duplicateCodeCount}, avvik fra ny versjon: ${modified}, utgåtte GUID-er: ${rm}, uendrede: ${same}.`,
       'success'
     );
   } catch (err) {
@@ -631,28 +679,32 @@ function renderTable() {
 
   tbody.innerHTML = page.map(r => {
     const badge = r.status === 'same'
-      ? '<span class="status-badge badge-same">Uendret</span>'
+      ? '<span class="status-badge badge-same">Ja</span>'
       : r.status === 'new'
-        ? '<span class="status-badge badge-new">Ny</span>'
+        ? '<span class="status-badge badge-new">Nei</span>'
         : r.status === 'removed'
-          ? '<span class="status-badge badge-removed">Utgått</span>'
-          : '<span class="status-badge badge-modified">Endret</span>';
+          ? '<span class="status-badge badge-removed">Nei</span>'
+          : '<span class="status-badge badge-modified">Nei</span>';
 
-    const og = r.oldGuid ? escapeHtml(r.oldGuid) : '<span class="null-val">—</span>';
-    const ng = r.newGuid ? escapeHtml(r.newGuid) : '<span class="null-val">—</span>';
-    const orv = r.oldRds ? escapeHtml(r.oldRds) : '<span class="null-val">—</span>';
-    const nrv = r.newRds ? escapeHtml(r.newRds) : '<span class="null-val">—</span>';
+    const guidVal = escapeHtml(r.guid || r.oldGuid || r.newGuid || '');
+    const oldRdsVal = r.oldRds ? escapeHtml(r.oldRds) : '<span class="null-val">—</span>';
+    const newRdsVal = r.newRds ? escapeHtml(r.newRds) : '<span class="null-val">—</span>';
+
+    let comment = 'Identisk i begge modeller';
+    if (r.status === 'modified') comment = 'Samme GUID, men ulik RDS-kode';
+    else if (r.status === 'new') comment = 'Finnes kun i ny modell';
+    else if (r.status === 'removed') comment = 'Finnes kun i eldre modell';
 
     return `<tr>
-      <td title="${escapeHtml(r.oldGuid || '')}">${og}</td>
-      <td>${orv}</td>
+      <td title="${guidVal}">${guidVal || '<span class="null-val">—</span>'}</td>
+      <td>${oldRdsVal}</td>
       <td>${badge}</td>
-      <td title="${escapeHtml(r.newGuid || '')}">${ng}</td>
-      <td>${nrv}</td>
+      <td>${newRdsVal}</td>
+      <td>${escapeHtml(comment)}</td>
     </tr>`;
   }).join('');
 
-  const filterLabels = { all: 'alle', same: 'uendrede', new: 'nye/endret', removed: 'utgåtte' };
+  const filterLabels = { all: 'alle', same: 'identiske', new: 'nye/endret', removed: 'utgåtte' };
   document.getElementById('table-label').textContent =
     `Viser ${start + 1}–${Math.min(start + PAGE_SIZE, total)} av ${total} ${filterLabels[currentFilter]} RDS-rader`;
 
