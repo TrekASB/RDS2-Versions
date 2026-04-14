@@ -1,6 +1,4 @@
-from pathlib import Path
-
-html = r'''<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="no">
 <head>
   <meta charset="UTF-8" />
@@ -671,6 +669,8 @@ html = r'''<!DOCTYPE html>
 
       rows.push({
         guid,
+        oldGuid: oldRow?.guid || '',
+        newGuid: newRow?.guid || '',
         oldRds: oldRow?.rds || '',
         newRds: newRow?.rds || '',
         result,
@@ -779,12 +779,13 @@ html = r'''<!DOCTYPE html>
     }
 
     const lines = [];
-    lines.push(['GUID', 'RDS_Eldre_Modell', 'RDS_Ny_Modell', 'Resultat', 'Kommentar'].join(','));
+    lines.push(['GUID_Eldre_Modell', 'RDS_Eldre_Modell', 'GUID_Ny_Modell', 'RDS_Ny_Modell', 'Resultat', 'Kommentar'].join(','));
 
     rows.forEach(row => {
       lines.push([
-        csvEscape(row.guid),
+        csvEscape(row.oldGuid),
         csvEscape(row.oldRds),
+        csvEscape(row.newGuid),
         csvEscape(row.newRds),
         csvEscape(row.result),
         csvEscape(row.comment)
@@ -823,8 +824,3 @@ html = r'''<!DOCTYPE html>
 </script>
 </body>
 </html>
-'''
-
-out = Path('/mnt/data/rds_comparator_fresh_trimble_extension.html')
-out.write_text(html, encoding='utf-8')
-print(out)
