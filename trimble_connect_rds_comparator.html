@@ -577,6 +577,94 @@
     return '';
   }
 
+  function getAnyPropertyValue(propertySets, candidateNames) {
+    const wanted = candidateNames.map(normalize);
+    for (const pset of propertySets || []) {
+      for (const prop of pset?.properties || []) {
+        const propName = normalize(prop?.name || prop?.property || prop?.key);
+        if (wanted.includes(propName)) {
+          return String(prop?.value ?? '').trim();
+        }
+      }
+    }
+    return '';
+  }
+
+  function getPropertyValueFromSet(propertySets, targetSetName, targetPropName) {
+    const wantedSet = normalize(targetSetName);
+    const wantedProp = normalize(targetPropName);
+
+    for (const pset of propertySets || []) {
+      const setName = normalize(pset?.name || pset?.set || pset?.title);
+      if (setName !== wantedSet) continue;
+
+      for (const prop of pset?.properties || []) {
+        const propName = normalize(prop?.name || prop?.property || prop?.key);
+        if (propName === wantedProp) {
+          return String(prop?.value ?? '').trim();
+        }
+      }
+    }
+
+    return '';
+  }
+
+  function getObjectClass(propRow) {
+    const fromZeroElement = getPropertyValueFromSet(propRow?.properties, '0_Element', 'Objektklasse');
+    if (fromZeroElement) return fromZeroElement;
+
+    const classFromRow =
+      propRow?.class ||
+      propRow?.entity ||
+      propRow?.entityName ||
+      propRow?.type ||
+      propRow?.product?.class ||
+      propRow?.product?.entity ||
+      propRow?.product?.type ||
+      propRow?.product?.entityName ||
+      '';
+
+    if (String(classFromRow).trim()) return String(classFromRow).trim();
+
+    const classFromProps = getAnyPropertyValue(propRow?.properties, [
+      'Objektklasse',
+      'IfcClass',
+      'Class',
+      'Entity',
+      'EntityName',
+      'ObjectClass'
+    ]);
+
+    return classFromProps || '';
+  }
+
+  function getObjectType(propRow) {
+    const fromZeroElement = getPropertyValueFromSet(propRow?.properties, '0_Element', 'Objekttype');
+    if (fromZeroElement) return fromZeroElement;
+
+    const typeFromRow =
+      propRow?.objectType ||
+      propRow?.productType ||
+      propRow?.predefinedType ||
+      propRow?.product?.objectType ||
+      propRow?.product?.productType ||
+      propRow?.product?.predefinedType ||
+      propRow?.product?.name ||
+      '';
+
+    if (String(typeFromRow).trim()) return String(typeFromRow).trim();
+
+    const typeFromProps = getAnyPropertyValue(propRow?.properties, [
+      'Objekttype',
+      'ObjectType',
+      'TypeName',
+      'PredefinedType',
+      'Type'
+    ]);
+
+    return typeFromProps || '';
+  }
+
   async function getModelGroup(modelId) {
     const groups = await readViewerGroups(undefined);
     return groups.find(g => getModelId(g) === modelId) || null;
@@ -638,8 +726,10 @@
       ).trim();
 
       const rds = getPropertyValue(propRow?.properties);
-      if (guid || rds) {
-        rows.push({ guid, rds });
+      const objectClass = getObjectClass(propRow);
+      const objectType = getObjectType(propRow);
+      if (guid || rds || objectClass || objectType) {
+        rows.push({ guid, rds, objectClass, objectType });
       }
     }
 
@@ -681,6 +771,10 @@
         newGuid: newRow?.guid || '',
         oldRds: oldRow?.rds || '',
         newRds: newRow?.rds || '',
+        oldObjectClass: oldRow?.objectClass || '',
+        oldObjectType: oldRow?.objectType || '',
+        newObjectClass: newRow?.objectClass || '',
+        newObjectType: newRow?.objectType || '',
         result,
         comment
       });
@@ -702,7 +796,16 @@
     return comparisonRows.filter(row => {
       if (activeFilter !== 'all' && row.result !== activeFilter) return false;
       if (!q) return true;
-      const haystack = normalize([row.guid, row.oldRds, row.newRds, row.comment].join(' '));
+      const haystack = normalize([
+        row.guid,
+        row.oldRds,
+        row.newRds,
+        row.oldObjectClass,
+        row.oldObjectType,
+        row.newObjectClass,
+        row.newObjectType,
+        row.comment
+      ].join(' '));
       return haystack.includes(q);
     });
   }
@@ -793,8 +896,12 @@
 
     lines.push([
       'GUID_Eldre_Modell',
+      'Objektklasse_Eldre_Modell (' + oldModelName + ')',
+      'Objekttype_Eldre_Modell (' + oldModelName + ')',
       'RDS_Eldre_Modell (' + oldModelName + ')',
       'GUID_Ny_Modell',
+      'Objektklasse_Ny_Modell (' + newModelName + ')',
+      'Objekttype_Ny_Modell (' + newModelName + ')',
       'RDS_Ny_Modell (' + newModelName + ')',
       'Resultat',
       'Kommentar'
@@ -803,8 +910,12 @@
     rows.forEach(row => {
       lines.push([
         csvEscape(row.oldGuid),
+        csvEscape(row.oldObjectClass),
+        csvEscape(row.oldObjectType),
         csvEscape(row.oldRds),
         csvEscape(row.newGuid),
+        csvEscape(row.newObjectClass),
+        csvEscape(row.newObjectType),
         csvEscape(row.newRds),
         csvEscape(row.result),
         csvEscape(row.comment)
