@@ -148,7 +148,7 @@
     }
     .stats{
       display:grid;
-      grid-template-columns:repeat(4,1fr);
+      grid-template-columns:repeat(5,1fr);
       gap:14px;
       margin-bottom:16px;
     }
@@ -174,6 +174,7 @@
     .equal .value{color:var(--green)}
     .different .value{color:var(--amber)}
     .new .value{color:var(--blue)}
+    .removed .value{color:var(--red)}
     .total .value{color:var(--text)}
     .toolbar{
       background:var(--card);
@@ -267,7 +268,7 @@
         <img src="norconsult-logo-black.png" alt="Norconsult logo" />
       </div>
       <div>
-        <h1 class="title"><br>RDS-tag sammenligning</h1>
+        <h1 class="title">Trimble Connect IFC<br>RDS-tag sammenligning</h1>
         <div class="subtitle">RDS Comparator</div>
         <div class="meta">
           Norconsult Norge<br>
@@ -297,28 +298,33 @@
 
     <div class="stats">
       <div class="stat total">
-        <div class="label">Totalt GUID-er</div>
+        <div class="label">Total GUID-er</div>
         <div id="statTotal" class="value">0</div>
       </div>
-      <div class="stat equal">
-        <div class="label">Like RDS-koder</div>
-        <div id="statEqual" class="value">0</div>
+      <div class="stat new">
+        <div class="label">New</div>
+        <div id="statNew" class="value">0</div>
+      </div>
+      <div class="stat removed">
+        <div class="label">Removed</div>
+        <div id="statRemoved" class="value">0</div>
       </div>
       <div class="stat different">
-        <div class="label">Ulike RDS-koder</div>
+        <div class="label">Different</div>
         <div id="statDifferent" class="value">0</div>
       </div>
-      <div class="stat new">
-        <div class="label">Nye i ny revisjon</div>
-        <div id="statNew" class="value">0</div>
+      <div class="stat equal">
+        <div class="label">Equal</div>
+        <div id="statEqual" class="value">0</div>
       </div>
     </div>
 
     <div class="toolbar">
       <button class="pill active" data-filter="all">Alle</button>
-      <button class="pill" data-filter="equal">Like</button>
-      <button class="pill" data-filter="different">Ulike</button>
-      <button class="pill" data-filter="new">Nye</button>
+      <button class="pill" data-filter="equal">Equal</button>
+      <button class="pill" data-filter="different">Different</button>
+      <button class="pill" data-filter="new">New</button>
+      <button class="pill" data-filter="removed">Removed</button>
       <input id="searchBox" type="text" placeholder="Søk på GUID eller RDS-kode…" />
       <button id="exportBtn" class="btn btn-secondary" type="button">Eksporter CSV</button>
     </div>
@@ -438,10 +444,12 @@
     const equal = rows.filter(r => r.result === 'equal').length;
     const different = rows.filter(r => r.result === 'different').length;
     const newly = rows.filter(r => r.result === 'new').length;
+    const removed = rows.filter(r => r.result === 'removed').length;
     document.getElementById('statTotal').textContent = total;
     document.getElementById('statEqual').textContent = equal;
     document.getElementById('statDifferent').textContent = different;
     document.getElementById('statNew').textContent = newly;
+    document.getElementById('statRemoved').textContent = removed;
   }
 
   function getSelectedModelMeta(selectEl) {
@@ -654,21 +662,23 @@
       if (oldRow && newRow) {
         if ((oldRow.rds || '') === (newRow.rds || '')) {
           result = 'equal';
-          comment = 'Lik RDS-kode i begge modeller';
+          comment = 'Equal - samme GUID og samme RDS-kode';
         } else {
           result = 'different';
-          comment = 'Samme GUID, men ulik RDS-kode';
+          comment = 'Different - samme GUID, men ulik RDS-kode';
         }
       } else if (!oldRow && newRow) {
         result = 'new';
-        comment = 'Finnes kun i ny revisjon';
+        comment = 'New - finnes kun i ny revisjon';
       } else {
         result = 'removed';
-        comment = 'Finnes kun i eldre revisjon';
+        comment = 'Removed - finnes kun i eldre revisjon';
       }
 
       rows.push({
         guid,
+        oldGuid: oldRow?.guid || '',
+        newGuid: newRow?.guid || '',
         oldRds: oldRow?.rds || '',
         newRds: newRow?.rds || '',
         result,
@@ -681,10 +691,10 @@
   }
 
   function badgeHtml(result) {
-    if (result === 'equal') return '<span class="badge b-equal">Lik</span>';
-    if (result === 'different') return '<span class="badge b-different">Ulik</span>';
-    if (result === 'new') return '<span class="badge b-new">Ny</span>';
-    return '<span class="badge b-removed">Utgått</span>';
+    if (result === 'equal') return '<span class="badge b-equal">Equal</span>';
+    if (result === 'different') return '<span class="badge b-different">Different</span>';
+    if (result === 'new') return '<span class="badge b-new">New</span>';
+    return '<span class="badge b-removed">Removed</span>';
   }
 
   function getVisibleRows() {
@@ -760,7 +770,8 @@
       const differentCount = comparisonRows.filter(r => r.result === 'different').length;
       const newCount = comparisonRows.filter(r => r.result === 'new').length;
 
-      setStatus(`Sammenligning ferdig. Like: ${equalCount}, ulike: ${differentCount}, nye i ny revisjon: ${newCount}.`, 'success');
+      const removedCount = comparisonRows.filter(r => r.result === 'removed').length;
+      setStatus(`Sammenligning ferdig. Total GUID-er: ${comparisonRows.length}, New: ${newCount}, Removed: ${removedCount}, Different: ${differentCount}, Equal: ${equalCount}.`, 'success');
     } catch (err) {
       console.error(err);
       setStatus(`Feil under sammenligning: ${err?.message || err}`, 'error');
@@ -778,22 +789,22 @@
 
     const lines = [];
     const oldModelName = document.getElementById('oldModel').selectedOptions[0]?.textContent || 'Eldre_Modell';
-const newModelName = document.getElementById('newModel').selectedOptions[0]?.textContent || 'Ny_Modell';
+    const newModelName = document.getElementById('newModel').selectedOptions[0]?.textContent || 'Ny_Modell';
 
-lines.push([
-  'GUID_Eldre_Modell',
-  'RDS_Eldre_Modell (' + oldModelName + ')',
-  'GUID_Ny_Modell',
-  'RDS_Ny_Modell (' + newModelName + ')',
-  'Resultat',
-  'Kommentar'
-].join(','));
+    lines.push([
+      'GUID_Eldre_Modell',
+      'RDS_Eldre_Modell (' + oldModelName + ')',
+      'GUID_Ny_Modell',
+      'RDS_Ny_Modell (' + newModelName + ')',
+      'Resultat',
+      'Kommentar'
+    ].join(','));
 
     rows.forEach(row => {
       lines.push([
-        csvEscape(row.guid),
+        csvEscape(row.oldGuid),
         csvEscape(row.oldRds),
-        csvEscape(row.guid),
+        csvEscape(row.newGuid),
         csvEscape(row.newRds),
         csvEscape(row.result),
         csvEscape(row.comment)
