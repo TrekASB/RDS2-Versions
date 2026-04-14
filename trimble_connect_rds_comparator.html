@@ -669,8 +669,6 @@
 
       rows.push({
         guid,
-        oldGuid: oldRow?.guid || '',
-        newGuid: newRow?.guid || '',
         oldRds: oldRow?.rds || '',
         newRds: newRow?.rds || '',
         result,
@@ -779,13 +777,23 @@
     }
 
     const lines = [];
-    lines.push(['GUID_Eldre_Modell', 'RDS_Eldre_Modell', 'GUID_Ny_Modell', 'RDS_Ny_Modell', 'Resultat', 'Kommentar'].join(','));
+    const oldModelName = document.getElementById('oldModel').selectedOptions[0]?.textContent || 'Eldre_Modell';
+const newModelName = document.getElementById('newModel').selectedOptions[0]?.textContent || 'Ny_Modell';
+
+lines.push([
+  'GUID_Eldre_Modell',
+  'RDS_Eldre_Modell (' + oldModelName + ')',
+  'GUID_Ny_Modell',
+  'RDS_Ny_Modell (' + newModelName + ')',
+  'Resultat',
+  'Kommentar'
+].join(','));
 
     rows.forEach(row => {
       lines.push([
-        csvEscape(row.oldGuid),
+        csvEscape(row.guid),
         csvEscape(row.oldRds),
-        csvEscape(row.newGuid),
+        csvEscape(row.guid),
         csvEscape(row.newRds),
         csvEscape(row.result),
         csvEscape(row.comment)
