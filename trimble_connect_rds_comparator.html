@@ -2,7 +2,7 @@
 <html lang="no">
 <head>
   <meta charset="UTF-8" />
-  <title>RDS Comparator V.7</title>
+  <title>RDS Comparator V.8</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <script src="https://components.connect.trimble.com/trimble-connect-workspace-api/index.js"></script>
   <style>
@@ -21,14 +21,36 @@
     .toolbar{padding:12px;margin-bottom:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}.pill{padding:8px 14px;border-radius:999px;border:1px solid var(--line);background:#fff;cursor:pointer;font-size:13px;font-weight:700;color:#334155}.pill.active{background:#eaf0fb;border-color:#b7c8ea;color:#274f9e}
     table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:13px}th{text-align:left;padding:12px 14px;background:#f7f9fc;border-bottom:1px solid var(--line);color:#475569;font-size:12px;text-transform:uppercase;letter-spacing:.04em}td{padding:10px 14px;border-bottom:1px solid #edf1f6;vertical-align:top;word-break:break-word}tr:hover td{background:#fafcff}.mono{font-family:Consolas,"Courier New",monospace}
     .badge{display:inline-block;padding:4px 9px;border-radius:999px;font-size:11px;font-weight:800}.b-equal{background:#e9f8ef;color:#15693f}.b-different{background:#fff2df;color:#915700}.b-new{background:#eaf1ff;color:#2c59c3}.b-removed{background:#fdecec;color:#b43a30}.b-rds{background:#e9f8ef;color:#15693f}.muted{color:var(--muted);font-style:italic}.footer-note{padding:12px 14px;font-size:12px;color:var(--muted);border-top:1px solid var(--line);background:#fafbfd}
-    @media(max-width:1050px){.control-grid{grid-template-columns:1fr 1fr}.stats{grid-template-columns:repeat(2,1fr)}}@media(max-width:720px){.header{flex-direction:column;align-items:flex-start}.control-grid{grid-template-columns:1fr}.stats{grid-template-columns:1fr}.toolbar{flex-direction:column;align-items:stretch}}
+
+    .btn-color{background:#f8fafc;color:#243447;border:1px solid var(--line)}
+    .chart-card{
+      background:var(--card);
+      border:1px solid var(--line);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow);
+      margin-bottom:16px;
+      padding:16px;
+      display:grid;
+      grid-template-columns:240px 1fr;
+      gap:18px;
+      align-items:center;
+    }
+    .pie-wrap{display:flex;align-items:center;justify-content:center}
+    .pie-legend{display:grid;grid-template-columns:repeat(2,minmax(180px,1fr));gap:10px 18px}
+    .legend-item{display:flex;align-items:center;gap:9px;font-size:13px;color:#334155}
+    .legend-dot{width:13px;height:13px;border-radius:50%;display:inline-block;border:1px solid rgba(0,0,0,.12)}
+    .clickable-row{cursor:pointer}
+    .clickable-row:hover td{background:#eef5ff}
+    .row-selected td{background:#eaf1ff!important}
+
+    @media(max-width:1050px){.control-grid{grid-template-columns:1fr 1fr}.stats{grid-template-columns:repeat(2,1fr)}}@media(max-width:720px){.header{flex-direction:column;align-items:flex-start}.control-grid{grid-template-columns:1fr}.stats{grid-template-columns:1fr}.toolbar{flex-direction:column;align-items:stretch}.chart-card{grid-template-columns:1fr}.pie-legend{grid-template-columns:1fr}}
   </style>
 </head>
 <body>
 <div class="wrap">
   <div class="header">
     <div class="logo-box"><img src="norconsult-logo-black.png" alt="Norconsult logo" /></div>
-    <div><h1 class="title">Trimble Connect IFC<br>RDS-tag sammenligning</h1><div class="subtitle">RDS Comparator V.7</div><div class="meta">Norconsult Norge<br>Developed by Norconsult (AI-assisted development). Kontaktperson: Edin.Dzakmic@norconsult.com</div></div>
+    <div><h1 class="title">Trimble Connect IFC<br>RDS-tag sammenligning</h1><div class="subtitle">RDS Comparator V.8</div><div class="meta">Norconsult Norge<br>Developed by Norconsult (AI-assisted development). Kontaktperson: Edin.Dzakmic@norconsult.com</div></div>
   </div>
   <div id="status" class="status">Starter extension og kobler til Trimble Connect…</div>
   <div class="controls"><div class="control-grid">
@@ -45,6 +67,19 @@
     <div class="stat equal"><div class="label">Equal GUID</div><div id="statEqual" class="value">0</div></div>
     <div class="stat rdsmatch"><div class="label">Like RDS-koder</div><div id="statRdsEqual" class="value">0</div></div>
   </div>
+  <div class="chart-card">
+    <div class="pie-wrap" id="pieChart">
+      <svg width="220" height="220" viewBox="0 0 220 220" aria-label="Kakediagram">
+        <circle cx="110" cy="110" r="82" fill="#eef2f7"></circle>
+        <text x="110" y="105" text-anchor="middle" font-size="20" font-weight="800" fill="#1f2937">0</text>
+        <text x="110" y="126" text-anchor="middle" font-size="12" fill="#6b7280">resultater</text>
+      </svg>
+    </div>
+    <div class="pie-legend" id="pieLegend">
+      <div class="muted">Kjør sammenligning for å vise resultatfordeling.</div>
+    </div>
+  </div>
+
   <div class="toolbar">
     <button class="pill active" data-filter="all">Alle GUID</button>
     <button class="pill" data-filter="rdsEqual">Like RDS-koder</button>
@@ -53,9 +88,11 @@
     <button class="pill" data-filter="new">New</button>
     <button class="pill" data-filter="removed">Removed</button>
     <input id="searchBox" type="text" placeholder="Søk på GUID eller RDS-kode…" />
+    <button id="colorBtn" class="btn btn-color" type="button" disabled>Fargelegg RESULTAT</button>
+    <button id="clearColorBtn" class="btn btn-secondary" type="button" disabled>Fjern farger</button>
     <button id="exportBtn" class="btn btn-secondary" type="button">Eksporter CSV</button>
   </div>
-  <div class="table-card"><table><thead><tr><th style="width:22%;">GUID / RDS-nøkkel</th><th style="width:24%;">RDS eldre modell</th><th style="width:13%;">Resultat</th><th style="width:24%;">RDS ny modell</th><th style="width:17%;">Kommentar</th></tr></thead><tbody id="resultBody"><tr><td colspan="5" class="muted">Ingen sammenligning kjørt ennå.</td></tr></tbody></table><div class="footer-note">V.7 viser både GUID-sammenligning og egen kontroll for like unike 01. RDS-tag mellom valgt eldre og ny modell. IFCPROJECT og andre IFC container-objekter filtreres bort før kontroll.</div></div>
+  <div class="table-card"><table><thead><tr><th style="width:22%;">GUID / RDS-nøkkel</th><th style="width:24%;">RDS eldre modell</th><th style="width:13%;">Resultat</th><th style="width:24%;">RDS ny modell</th><th style="width:17%;">Kommentar</th></tr></thead><tbody id="resultBody"><tr><td colspan="5" class="muted">Ingen sammenligning kjørt ennå.</td></tr></tbody></table><div class="footer-note">V.8 viser GUID-sammenligning, like RDS-koder, fargelegging etter Resultat, klikkbar objektliste med zoom til objekt og kakediagram. IFCPROJECT og andre IFC container-objekter filtreres bort før kontroll.</div></div>
 </div>
 <script>
 (() => {
@@ -66,7 +103,7 @@
 
   let api=null, models=[], comparisonRows=[], rdsMatchRows=[], activeFilter='all';
   const $=id=>document.getElementById(id);
-  const statusEl=$('status'), oldModelEl=$('oldModel'), newModelEl=$('newModel'), oldInfoEl=$('oldInfo'), newInfoEl=$('newInfo'), compareBtn=$('compareBtn'), refreshBtn=$('refreshBtn'), exportBtn=$('exportBtn'), searchBox=$('searchBox'), resultBody=$('resultBody');
+  const statusEl=$('status'), oldModelEl=$('oldModel'), newModelEl=$('newModel'), oldInfoEl=$('oldInfo'), newInfoEl=$('newInfo'), compareBtn=$('compareBtn'), refreshBtn=$('refreshBtn'), exportBtn=$('exportBtn'), colorBtn=$('colorBtn'), clearColorBtn=$('clearColorBtn'), searchBox=$('searchBox'), resultBody=$('resultBody'), pieChart=$('pieChart'), pieLegend=$('pieLegend');
 
   function setStatus(message,tone='info'){statusEl.textContent=message;const s={error:['#fff1f1','#efc8c8','#9d2525'],success:['#eef9f1','#c7e6d0','#1e6b3d'],warn:['#fff7e8','#edd7a7','#8b5d00'],info:['#eef3fb','#c7d5f0','#35507a']}[tone]||['#eef3fb','#c7d5f0','#35507a'];statusEl.style.background=s[0];statusEl.style.borderColor=s[1];statusEl.style.color=s[2];}
   function escapeHtml(v){return String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));}
@@ -88,6 +125,68 @@
     $('statRemoved').textContent=rows.filter(r=>r.result==='removed').length;
     $('statRdsEqual').textContent=rdsMatchRows.length;
   }
+
+  function resultColor(result){
+    if(result==='equal') return {hex:'#198754', rgb:{r:25,g:135,b:84,a:255}, label:'Equal GUID'};
+    if(result==='different') return {hex:'#b26a00', rgb:{r:178,g:106,b:0,a:255}, label:'Different'};
+    if(result==='new') return {hex:'#2f66d0', rgb:{r:47,g:102,b:208,a:255}, label:'New'};
+    if(result==='removed') return {hex:'#c0392b', rgb:{r:192,g:57,b:43,a:255}, label:'Removed'};
+    if(result==='rdsEqual') return {hex:'#198754', rgb:{r:25,g:135,b:84,a:255}, label:'Like RDS'};
+    return {hex:'#6b7280', rgb:{r:107,g:114,b:128,a:255}, label:result || 'Ukjent'};
+  }
+
+  function pieSlice(cx, cy, r, startAngle, endAngle){
+    const start = polarToCartesian(cx, cy, r, endAngle);
+    const end = polarToCartesian(cx, cy, r, startAngle);
+    const largeArc = endAngle - startAngle <= 180 ? 0 : 1;
+    return `M ${cx} ${cy} L ${start.x} ${start.y} A ${r} ${r} 0 ${largeArc} 0 ${end.x} ${end.y} Z`;
+  }
+
+  function polarToCartesian(cx, cy, r, angleInDegrees){
+    const angleInRadians = (angleInDegrees - 90) * Math.PI / 180.0;
+    return { x: cx + (r * Math.cos(angleInRadians)), y: cy + (r * Math.sin(angleInRadians)) };
+  }
+
+  function renderPieChart(){
+    const counts = {
+      new: comparisonRows.filter(r => r.result === 'new').length,
+      removed: comparisonRows.filter(r => r.result === 'removed').length,
+      different: comparisonRows.filter(r => r.result === 'different').length,
+      equal: comparisonRows.filter(r => r.result === 'equal').length
+    };
+
+    const total = Object.values(counts).reduce((a,b)=>a+b,0);
+    if(!total){
+      pieChart.innerHTML = `<svg width="220" height="220" viewBox="0 0 220 220" aria-label="Kakediagram"><circle cx="110" cy="110" r="82" fill="#eef2f7"></circle><text x="110" y="105" text-anchor="middle" font-size="20" font-weight="800" fill="#1f2937">0</text><text x="110" y="126" text-anchor="middle" font-size="12" fill="#6b7280">resultater</text></svg>`;
+      pieLegend.innerHTML = '<div class="muted">Kjør sammenligning for å vise resultatfordeling.</div>';
+      return;
+    }
+
+    let angle = 0;
+    const slices = [];
+    for(const key of ['new','removed','different','equal']){
+      const value = counts[key];
+      if(!value) continue;
+      const nextAngle = angle + (value / total) * 360;
+      slices.push(`<path d="${pieSlice(110,110,82,angle,nextAngle)}" fill="${resultColor(key).hex}"></path>`);
+      angle = nextAngle;
+    }
+
+    pieChart.innerHTML = `
+      <svg width="220" height="220" viewBox="0 0 220 220" aria-label="Kakediagram">
+        ${slices.join('')}
+        <circle cx="110" cy="110" r="48" fill="#fff"></circle>
+        <text x="110" y="105" text-anchor="middle" font-size="22" font-weight="800" fill="#1f2937">${total}</text>
+        <text x="110" y="126" text-anchor="middle" font-size="12" fill="#6b7280">GUID-er</text>
+      </svg>
+    `;
+
+    pieLegend.innerHTML = ['new','removed','different','equal'].map(key => {
+      const meta = resultColor(key);
+      return `<div class="legend-item"><span class="legend-dot" style="background:${meta.hex}"></span><strong>${escapeHtml(meta.label)}</strong><span>${counts[key]}</span></div>`;
+    }).join('');
+  }
+
   function updateModelInfo(){const o=getSelectedModelMeta(oldModelEl), n=getSelectedModelMeta(newModelEl);oldInfoEl.textContent=o?`${o.objectCount??'-'} objekter${o.date?' · '+o.date:''}`:'';newInfoEl.textContent=n?`${n.objectCount??'-'} objekter${n.date?' · '+n.date:''}`:'';compareBtn.disabled=!(o&&n&&o.id!==n.id);}
   function fillModelDropdowns(){const po=oldModelEl.value,pn=newModelEl.value;[oldModelEl,newModelEl].forEach(sel=>{sel.innerHTML='<option value="">— Velg modell —</option>';models.forEach(m=>{const opt=document.createElement('option');opt.value=m.id;opt.textContent=m.name;sel.appendChild(opt);});});if(models.some(m=>m.id===po))oldModelEl.value=po;if(models.some(m=>m.id===pn))newModelEl.value=pn;updateModelInfo();}
   async function connectApi(){if(api)return api;if(!window.TrimbleConnectWorkspace?.connect)throw new Error('Trimble Connect Workspace API ble ikke lastet.');api=await window.TrimbleConnectWorkspace.connect(window.parent,()=>{});return api;}
@@ -138,7 +237,7 @@
       if(EXCLUDED_GUIDS.has(guid) || hasExcludedIfcType(propRow)) continue;
 
       const rds=normRds(getPropertyValue(propRow?.properties)), objectClass=String(getObjectClass(propRow)||'').trim(), objectType=String(getObjectType(propRow)||'').trim();
-      if(guid||rds||objectClass||objectType)rows.push({guid,rds,objectClass,objectType,ifcType});
+      if(guid||rds||objectClass||objectType)rows.push({modelId,runtimeId: runtimeIds[i],guid,rds,objectClass,objectType,ifcType});
     }
     return rows;
   }
@@ -152,7 +251,7 @@
       if(o&&n){if((o.rds||'')===(n.rds||'')){result='equal';comment='Equal GUID - samme GUID og samme RDS-kode';}else{result='different';comment='Different - samme GUID, men ulik RDS-kode';}}
       else if(!o&&n){result='new';comment='New - finnes kun i ny revisjon';}
       else{result='removed';comment='Removed - finnes kun i eldre revisjon';}
-      rows.push({guid,oldGuid:o?.guid||'',newGuid:n?.guid||'',oldRds:o?.rds||'',newRds:n?.rds||'',oldObjectClass:o?.objectClass||'',oldObjectType:o?.objectType||'',newObjectClass:n?.objectClass||'',newObjectType:n?.objectType||'',result,comment});
+      rows.push({guid,oldGuid:o?.guid||'',newGuid:n?.guid||'',oldRds:o?.rds||'',newRds:n?.rds||'',oldObjectClass:o?.objectClass||'',oldObjectType:o?.objectType||'',newObjectClass:n?.objectClass||'',newObjectType:n?.objectType||'',oldModelId:o?.modelId||'',newModelId:n?.modelId||'',oldRuntimeId:o?.runtimeId??'',newRuntimeId:n?.runtimeId??'',result,comment});
     }
     return rows.sort((a,b)=>a.guid.localeCompare(b.guid,'no'));
   }
@@ -163,20 +262,109 @@
     newRows.filter(r=>r.rds).forEach(r=>{if(!newMap.has(r.rds))newMap.set(r.rds,[]);newMap.get(r.rds).push(r);});
     return [...oldMap.keys()].filter(tag=>newMap.has(tag)).sort((a,b)=>a.localeCompare(b,'no')).map(tag=>({
       guid:tag, oldGuid:(oldMap.get(tag)||[]).map(r=>r.guid).filter(Boolean).join(' | '), newGuid:(newMap.get(tag)||[]).map(r=>r.guid).filter(Boolean).join(' | '),
-      oldRds:tag, newRds:tag, oldObjectClass:`${oldMap.get(tag).length} objekt(er)`, newObjectClass:`${newMap.get(tag).length} objekt(er)`, result:'rdsEqual', comment:`Like RDS-kode i begge modeller (${oldMap.get(tag).length} eldre / ${newMap.get(tag).length} ny)`
+      oldRds:tag, newRds:tag, oldObjectClass:`${oldMap.get(tag).length} objekt(er)`, newObjectClass:`${newMap.get(tag).length} objekt(er)`, oldModelId:oldMap.get(tag)?.[0]?.modelId||'', newModelId:newMap.get(tag)?.[0]?.modelId||'', oldRuntimeId:oldMap.get(tag)?.[0]?.runtimeId??'', newRuntimeId:newMap.get(tag)?.[0]?.runtimeId??'', result:'rdsEqual', comment:`Like RDS-kode i begge modeller (${oldMap.get(tag).length} eldre / ${newMap.get(tag).length} ny)`
     }));
   }
 
   function badgeHtml(result){if(result==='rdsEqual')return'<span class="badge b-rds">Like RDS</span>';if(result==='equal')return'<span class="badge b-equal">Equal</span>';if(result==='different')return'<span class="badge b-different">Different</span>';if(result==='new')return'<span class="badge b-new">New</span>';return'<span class="badge b-removed">Removed</span>';}
   function getVisibleRows(){const q=normalize(searchBox.value), source=activeFilter==='rdsEqual'?rdsMatchRows:comparisonRows;return source.filter(row=>{if(activeFilter!=='all'&&activeFilter!=='rdsEqual'&&row.result!==activeFilter)return false;if(!q)return true;return normalize([row.guid,row.oldRds,row.newRds,row.oldObjectClass,row.oldObjectType,row.newObjectClass,row.newObjectType,row.comment].join(' ')).includes(q);});}
-  function renderTable(){const rows=getVisibleRows();if(!rows.length){resultBody.innerHTML='<tr><td colspan="5" class="muted">Ingen treff for valgt filter/søk.</td></tr>';return;}resultBody.innerHTML=rows.map(row=>`<tr><td class="mono">${escapeHtml(row.guid)}</td><td class="mono">${row.oldRds?escapeHtml(row.oldRds):'<span class="muted">—</span>'}</td><td>${badgeHtml(row.result)}</td><td class="mono">${row.newRds?escapeHtml(row.newRds):'<span class="muted">—</span>'}</td><td>${escapeHtml(row.comment)}</td></tr>`).join('');}
+  function renderTable(){
+    const rows=getVisibleRows();
+    if(!rows.length){
+      resultBody.innerHTML='<tr><td colspan="5" class="muted">Ingen treff for valgt filter/søk.</td></tr>';
+      return;
+    }
+
+    resultBody.innerHTML=rows.map((row,idx)=>{
+      const targetModelId = row.result === 'removed' ? row.oldModelId : (row.newModelId || row.oldModelId);
+      const targetRuntimeId = row.result === 'removed' ? row.oldRuntimeId : (row.newRuntimeId ?? row.oldRuntimeId);
+      const canSelect = targetModelId && targetRuntimeId !== '' && targetRuntimeId !== undefined && targetRuntimeId !== null;
+      return `<tr class="${canSelect?'clickable-row':''}" data-row-index="${idx}" ${canSelect?`onclick="window.selectComparatorObject('${escapeHtml(targetModelId)}','${escapeHtml(targetRuntimeId)}',this)"`:''}>
+        <td class="mono">${escapeHtml(row.guid)}</td>
+        <td class="mono">${row.oldRds?escapeHtml(row.oldRds):'<span class="muted">—</span>'}</td>
+        <td>${badgeHtml(row.result)}</td>
+        <td class="mono">${row.newRds?escapeHtml(row.newRds):'<span class="muted">—</span>'}</td>
+        <td>${escapeHtml(row.comment)}</td>
+      </tr>`;
+    }).join('');
+  }
+
+
+  window.selectComparatorObject = async function(modelId, runtimeId, rowEl){
+    if(!api?.viewer || !modelId || runtimeId === '' || runtimeId === undefined || runtimeId === null) return;
+
+    document.querySelectorAll('.row-selected').forEach(x => x.classList.remove('row-selected'));
+    if(rowEl) rowEl.classList.add('row-selected');
+
+    const rid = Number(runtimeId);
+    try{
+      await api.viewer.setSelection({ modelObjectIds:[{ modelId, objectRuntimeIds:[rid] }] }, 'set');
+      try{
+        await api.viewer.setCamera({ modelObjectIds:[{ modelId, objectRuntimeIds:[rid] }] }, { animationTime:500 });
+      }catch(e){}
+      setStatus('Valgt objekt i modellen.', 'success');
+    }catch(err){
+      console.warn(err);
+      setStatus('Kunne ikke velge/zoome til objektet i Trimble Connect.', 'warn');
+    }
+  };
+
+  async function colorizeByResult(){
+    if(!api?.viewer || !comparisonRows.length){
+      setStatus('Kjør sammenligning før fargelegging.', 'warn');
+      return;
+    }
+
+    try{
+      await api.viewer.setObjectState(undefined, { color:'reset' });
+
+      const buckets = new Map();
+      for(const row of comparisonRows){
+        const targets = [];
+        if(row.result === 'removed' && row.oldModelId && row.oldRuntimeId !== '') targets.push({modelId:row.oldModelId, runtimeId:row.oldRuntimeId});
+        if(row.result === 'new' && row.newModelId && row.newRuntimeId !== '') targets.push({modelId:row.newModelId, runtimeId:row.newRuntimeId});
+        if((row.result === 'equal' || row.result === 'different') && row.oldModelId && row.oldRuntimeId !== '') targets.push({modelId:row.oldModelId, runtimeId:row.oldRuntimeId});
+        if((row.result === 'equal' || row.result === 'different') && row.newModelId && row.newRuntimeId !== '') targets.push({modelId:row.newModelId, runtimeId:row.newRuntimeId});
+
+        for(const t of targets){
+          const key = `${row.result}||${t.modelId}`;
+          if(!buckets.has(key)) buckets.set(key, {result:row.result, modelId:t.modelId, ids:[]});
+          buckets.get(key).ids.push(Number(t.runtimeId));
+        }
+      }
+
+      for(const bucket of buckets.values()){
+        if(!bucket.ids.length) continue;
+        await api.viewer.setObjectState(
+          { modelObjectIds:[{ modelId:bucket.modelId, objectRuntimeIds:bucket.ids }] },
+          { color: resultColor(bucket.result).rgb }
+        );
+      }
+
+      clearColorBtn.disabled = false;
+      setStatus('Objekter er fargelagt etter Resultat: New blå, Removed rød, Different gul/oransje, Equal grønn.', 'success');
+    }catch(err){
+      console.error(err);
+      setStatus(`Feil ved fargelegging: ${err?.message || err}`, 'error');
+    }
+  }
+
+  async function clearColors(){
+    if(!api?.viewer) return;
+    try{
+      await api.viewer.setObjectState(undefined, { color:'reset' });
+      setStatus('Farger fjernet fra modellen.', 'success');
+    }catch(err){
+      setStatus(`Feil ved fjerning av farger: ${err?.message || err}`, 'error');
+    }
+  }
 
   async function refreshModels(){try{compareBtn.disabled=true;setStatus('Kobler til Trimble Connect og leser modellene som vises i 3D-vinduet…');models=await readVisibleModelsFromViewer();fillModelDropdowns();setStatus(models.length?`Fant ${models.length} modell${models.length===1?'':'er'} i 3D-vinduet. Velg eldre og ny revisjon for sammenligning.`:'Fant ingen modeller i 3D-vinduet. Kontroller at modellene er åpne/synlige og prøv igjen.',models.length?'success':'warn');}catch(err){console.error(err);setStatus(`Feil ved lesing av modeller: ${err?.message||err}`,'error');}}
   async function runComparison(){
     const oldId=oldModelEl.value,newId=newModelEl.value;if(!oldId||!newId||oldId===newId){setStatus('Velg to ulike modeller før du kjører sammenligning.','warn');return;}
     try{compareBtn.disabled=true;setStatus('Leser objekter og RDS-koder fra valgte modeller…');
       const [oldRows,newRows]=await Promise.all([collectModelData(oldId),collectModelData(newId)]);
-      comparisonRows=compareByGuid(oldRows,newRows);rdsMatchRows=compareByRds(oldRows,newRows);updateSummary(comparisonRows);renderTable();
+      comparisonRows=compareByGuid(oldRows,newRows);rdsMatchRows=compareByRds(oldRows,newRows);updateSummary(comparisonRows);renderPieChart();renderTable();colorBtn.disabled=!comparisonRows.length;clearColorBtn.disabled=false;
       const eq=comparisonRows.filter(r=>r.result==='equal').length,diff=comparisonRows.filter(r=>r.result==='different').length,nw=comparisonRows.filter(r=>r.result==='new').length,rem=comparisonRows.filter(r=>r.result==='removed').length;
       setStatus(`Sammenligning ferdig. Total GUID-er: ${comparisonRows.length}, New: ${nw}, Removed: ${rem}, Different: ${diff}, Equal GUID: ${eq}. Like unike RDS-koder mellom modellene: ${rdsMatchRows.length}.`,'success');
     }catch(err){console.error(err);setStatus(`Feil under sammenligning: ${err?.message||err}`,'error');}finally{updateModelInfo();}
@@ -190,7 +378,7 @@
   }
 
   document.querySelectorAll('.pill').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('.pill').forEach(x=>x.classList.remove('active'));btn.classList.add('active');activeFilter=btn.dataset.filter;renderTable();}));
-  oldModelEl.addEventListener('change',updateModelInfo);newModelEl.addEventListener('change',updateModelInfo);refreshBtn.addEventListener('click',refreshModels);compareBtn.addEventListener('click',runComparison);exportBtn.addEventListener('click',exportCsv);searchBox.addEventListener('input',renderTable);window.addEventListener('load',refreshModels);
+  oldModelEl.addEventListener('change',updateModelInfo);newModelEl.addEventListener('change',updateModelInfo);refreshBtn.addEventListener('click',refreshModels);compareBtn.addEventListener('click',runComparison);colorBtn.addEventListener('click',colorizeByResult);clearColorBtn.addEventListener('click',clearColors);exportBtn.addEventListener('click',exportCsv);searchBox.addEventListener('input',renderTable);window.addEventListener('load',refreshModels);
 })();
 </script>
 </body>
