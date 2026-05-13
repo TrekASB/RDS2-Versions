@@ -2,954 +2,195 @@
 <html lang="no">
 <head>
   <meta charset="UTF-8" />
-  <title>RDS Comparator</title>
+  <title>RDS Comparator V.7</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <script src="https://components.connect.trimble.com/trimble-connect-workspace-api/index.js"></script>
   <style>
-    :root{
-      --bg:#f5f7fa;
-      --card:#ffffff;
-      --line:#d8dee8;
-      --text:#1f2937;
-      --muted:#6b7280;
-      --blue:#2f66d0;
-      --green:#198754;
-      --amber:#b26a00;
-      --red:#c0392b;
-      --shadow:0 6px 16px rgba(17,24,39,.08);
-      --radius:14px;
-    }
-    *{box-sizing:border-box}
-    body{
-      margin:0;
-      font-family:Segoe UI, Arial, sans-serif;
-      background:var(--bg);
-      color:var(--text);
-    }
-    .wrap{
-      max-width:1280px;
-      margin:0 auto;
-      padding:20px;
-    }
-    .header{
-      display:flex;
-      gap:18px;
-      align-items:center;
-      background:var(--card);
-      border:1px solid var(--line);
-      border-radius:var(--radius);
-      padding:18px;
-      box-shadow:var(--shadow);
-      margin-bottom:16px;
-    }
-    .logo-box{
-      width:160px;
-      min-width:160px;
-      height:82px;
-      border:1px solid var(--line);
-      border-radius:12px;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      background:#fff;
-      overflow:hidden;
-    }
-    .logo-box img{
-      width:86%;
-      height:auto;
-      object-fit:contain;
-    }
-    .title{
-      font-size:32px;
-      font-weight:700;
-      margin:0 0 4px 0;
-      line-height:1.08;
-    }
-    .subtitle{
-      color:var(--blue);
-      font-size:20px;
-      font-weight:700;
-      margin:0 0 2px 0;
-    }
-    .meta{
-      color:var(--muted);
-      font-size:13px;
-      font-style:italic;
-      line-height:1.5;
-    }
-    .status{
-      background:#eef3fb;
-      border:1px solid #c7d5f0;
-      color:#35507a;
-      padding:12px 14px;
-      border-radius:12px;
-      margin-bottom:16px;
-      font-size:14px;
-    }
-    .controls{
-      background:var(--card);
-      border:1px solid var(--line);
-      border-radius:var(--radius);
-      padding:16px;
-      box-shadow:var(--shadow);
-      margin-bottom:16px;
-    }
-    .control-grid{
-      display:grid;
-      grid-template-columns:1fr 1fr auto auto;
-      gap:14px;
-      align-items:end;
-    }
-    .field label{
-      display:block;
-      font-size:12px;
-      font-weight:700;
-      color:var(--muted);
-      margin-bottom:8px;
-      text-transform:uppercase;
-      letter-spacing:.04em;
-    }
-    select, input{
-      width:100%;
-      padding:10px 12px;
-      border:1px solid var(--line);
-      border-radius:10px;
-      font-size:14px;
-      background:#fff;
-      color:var(--text);
-    }
-    .btn{
-      padding:11px 16px;
-      border:none;
-      border-radius:10px;
-      cursor:pointer;
-      font-size:14px;
-      font-weight:700;
-      min-width:160px;
-    }
-    .btn-primary{
-      background:var(--blue);
-      color:#fff;
-    }
-    .btn-secondary{
-      background:#eef2f7;
-      color:#243447;
-      border:1px solid var(--line);
-    }
-    .btn:disabled{
-      opacity:.55;
-      cursor:not-allowed;
-    }
-    .model-info{
-      margin-top:8px;
-      font-size:12px;
-      color:var(--muted);
-      min-height:16px;
-    }
-    .stats{
-      display:grid;
-      grid-template-columns:repeat(5,1fr);
-      gap:14px;
-      margin-bottom:16px;
-    }
-    .stat{
-      background:var(--card);
-      border:1px solid var(--line);
-      border-radius:var(--radius);
-      padding:14px 16px;
-      box-shadow:var(--shadow);
-    }
-    .stat .label{
-      font-size:12px;
-      color:var(--muted);
-      margin-bottom:6px;
-      text-transform:uppercase;
-      letter-spacing:.04em;
-    }
-    .stat .value{
-      font-size:30px;
-      font-weight:800;
-      line-height:1;
-    }
-    .equal .value{color:var(--green)}
-    .different .value{color:var(--amber)}
-    .new .value{color:var(--blue)}
-    .removed .value{color:var(--red)}
-    .total .value{color:var(--text)}
-    .toolbar{
-      background:var(--card);
-      border:1px solid var(--line);
-      border-radius:var(--radius);
-      padding:12px;
-      box-shadow:var(--shadow);
-      margin-bottom:12px;
-      display:flex;
-      gap:10px;
-      align-items:center;
-      flex-wrap:wrap;
-    }
-    .pill{
-      padding:8px 14px;
-      border-radius:999px;
-      border:1px solid var(--line);
-      background:#fff;
-      cursor:pointer;
-      font-size:13px;
-      font-weight:700;
-      color:#334155;
-    }
-    .pill.active{background:#eaf0fb;border-color:#b7c8ea;color:#274f9e}
-    .table-card{
-      background:var(--card);
-      border:1px solid var(--line);
-      border-radius:var(--radius);
-      box-shadow:var(--shadow);
-      overflow:hidden;
-    }
-    table{
-      width:100%;
-      border-collapse:collapse;
-      table-layout:fixed;
-      font-size:13px;
-    }
-    th{
-      text-align:left;
-      padding:12px 14px;
-      background:#f7f9fc;
-      border-bottom:1px solid var(--line);
-      color:#475569;
-      font-size:12px;
-      text-transform:uppercase;
-      letter-spacing:.04em;
-    }
-    td{
-      padding:10px 14px;
-      border-bottom:1px solid #edf1f6;
-      vertical-align:top;
-      word-break:break-word;
-    }
-    tr:hover td{background:#fafcff}
-    .mono{font-family:Consolas, "Courier New", monospace}
-    .badge{
-      display:inline-block;
-      padding:4px 9px;
-      border-radius:999px;
-      font-size:11px;
-      font-weight:800;
-    }
-    .b-equal{background:#e9f8ef;color:#15693f}
-    .b-different{background:#fff2df;color:#915700}
-    .b-new{background:#eaf1ff;color:#2c59c3}
-    .b-removed{background:#fdecec;color:#b43a30}
-    .muted{color:var(--muted); font-style:italic}
-    .footer-note{
-      padding:12px 14px;
-      font-size:12px;
-      color:var(--muted);
-      border-top:1px solid var(--line);
-      background:#fafbfd;
-    }
-    @media (max-width: 1050px){
-      .control-grid{grid-template-columns:1fr 1fr}
-      .stats{grid-template-columns:repeat(2,1fr)}
-    }
-    @media (max-width: 720px){
-      .header{flex-direction:column; align-items:flex-start}
-      .control-grid{grid-template-columns:1fr}
-      .stats{grid-template-columns:1fr}
-      .toolbar{flex-direction:column; align-items:stretch}
-    }
+    :root{--bg:#f5f7fa;--card:#fff;--line:#d8dee8;--text:#1f2937;--muted:#6b7280;--blue:#2f66d0;--green:#198754;--amber:#b26a00;--red:#c0392b;--shadow:0 6px 16px rgba(17,24,39,.08);--radius:14px}
+    *{box-sizing:border-box} body{margin:0;font-family:Segoe UI,Arial,sans-serif;background:var(--bg);color:var(--text)} .wrap{max-width:1280px;margin:0 auto;padding:20px}
+    .header{display:flex;gap:18px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:18px;box-shadow:var(--shadow);margin-bottom:16px}
+    .logo-box{width:160px;min-width:160px;height:82px;border:1px solid var(--line);border-radius:12px;display:flex;align-items:center;justify-content:center;background:#fff;overflow:hidden}.logo-box img{width:86%;height:auto;object-fit:contain}
+    .title{font-size:32px;font-weight:700;margin:0 0 4px 0;line-height:1.08}.subtitle{color:var(--blue);font-size:20px;font-weight:700;margin:0 0 2px 0}.meta{color:var(--muted);font-size:13px;font-style:italic;line-height:1.5}
+    .status{background:#eef3fb;border:1px solid #c7d5f0;color:#35507a;padding:12px 14px;border-radius:12px;margin-bottom:16px;font-size:14px}
+    .controls,.toolbar,.table-card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)} .controls{padding:16px;margin-bottom:16px}
+    .control-grid{display:grid;grid-template-columns:1fr 1fr auto auto;gap:14px;align-items:end}.field label{display:block;font-size:12px;font-weight:700;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.04em}
+    select,input{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font-size:14px;background:#fff;color:var(--text)} .btn{padding:11px 16px;border:none;border-radius:10px;cursor:pointer;font-size:14px;font-weight:700;min-width:160px}
+    .btn-primary{background:var(--blue);color:#fff}.btn-secondary{background:#eef2f7;color:#243447;border:1px solid var(--line)}.btn:disabled{opacity:.55;cursor:not-allowed}.model-info{margin-top:8px;font-size:12px;color:var(--muted);min-height:16px}
+    .stats{display:grid;grid-template-columns:repeat(6,1fr);gap:14px;margin-bottom:16px}.stat{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;box-shadow:var(--shadow)}.stat .label{font-size:12px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em}.stat .value{font-size:30px;font-weight:800;line-height:1}
+    .equal .value,.rdsmatch .value{color:var(--green)}.different .value{color:var(--amber)}.new .value{color:var(--blue)}.removed .value{color:var(--red)}.total .value{color:var(--text)}
+    .toolbar{padding:12px;margin-bottom:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}.pill{padding:8px 14px;border-radius:999px;border:1px solid var(--line);background:#fff;cursor:pointer;font-size:13px;font-weight:700;color:#334155}.pill.active{background:#eaf0fb;border-color:#b7c8ea;color:#274f9e}
+    table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:13px}th{text-align:left;padding:12px 14px;background:#f7f9fc;border-bottom:1px solid var(--line);color:#475569;font-size:12px;text-transform:uppercase;letter-spacing:.04em}td{padding:10px 14px;border-bottom:1px solid #edf1f6;vertical-align:top;word-break:break-word}tr:hover td{background:#fafcff}.mono{font-family:Consolas,"Courier New",monospace}
+    .badge{display:inline-block;padding:4px 9px;border-radius:999px;font-size:11px;font-weight:800}.b-equal{background:#e9f8ef;color:#15693f}.b-different{background:#fff2df;color:#915700}.b-new{background:#eaf1ff;color:#2c59c3}.b-removed{background:#fdecec;color:#b43a30}.b-rds{background:#e9f8ef;color:#15693f}.muted{color:var(--muted);font-style:italic}.footer-note{padding:12px 14px;font-size:12px;color:var(--muted);border-top:1px solid var(--line);background:#fafbfd}
+    @media(max-width:1050px){.control-grid{grid-template-columns:1fr 1fr}.stats{grid-template-columns:repeat(2,1fr)}}@media(max-width:720px){.header{flex-direction:column;align-items:flex-start}.control-grid{grid-template-columns:1fr}.stats{grid-template-columns:1fr}.toolbar{flex-direction:column;align-items:stretch}}
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <div class="header">
-      <div class="logo-box">
-        <img src="norconsult-logo-black.png" alt="Norconsult logo" />
-      </div>
-      <div>
-        <h1 class="title">Trimble Connect IFC<br>RDS-tag sammenligning</h1>
-        <div class="subtitle">RDS Comparator</div>
-        <div class="meta">
-          Norconsult Norge<br>
-          Developed by Norconsult (AI-assisted development). Kontaktperson: Edin.Dzakmic@norconsult.com
-        </div>
-      </div>
-    </div>
-
-    <div id="status" class="status">Starter extension og kobler til Trimble Connect…</div>
-
-    <div class="controls">
-      <div class="control-grid">
-        <div class="field">
-          <label for="oldModel">Eldre modellversjon</label>
-          <select id="oldModel"></select>
-          <div id="oldInfo" class="model-info"></div>
-        </div>
-        <div class="field">
-          <label for="newModel">Ny modellversjon</label>
-          <select id="newModel"></select>
-          <div id="newInfo" class="model-info"></div>
-        </div>
-        <button id="refreshBtn" class="btn btn-secondary" type="button">Oppdater modeller</button>
-        <button id="compareBtn" class="btn btn-primary" type="button" disabled>Kjør sammenligning</button>
-      </div>
-    </div>
-
-    <div class="stats">
-      <div class="stat total">
-        <div class="label">Total GUID-er</div>
-        <div id="statTotal" class="value">0</div>
-      </div>
-      <div class="stat new">
-        <div class="label">New</div>
-        <div id="statNew" class="value">0</div>
-      </div>
-      <div class="stat removed">
-        <div class="label">Removed</div>
-        <div id="statRemoved" class="value">0</div>
-      </div>
-      <div class="stat different">
-        <div class="label">Different</div>
-        <div id="statDifferent" class="value">0</div>
-      </div>
-      <div class="stat equal">
-        <div class="label">Equal</div>
-        <div id="statEqual" class="value">0</div>
-      </div>
-    </div>
-
-    <div class="toolbar">
-      <button class="pill active" data-filter="all">Alle</button>
-      <button class="pill" data-filter="equal">Equal</button>
-      <button class="pill" data-filter="different">Different</button>
-      <button class="pill" data-filter="new">New</button>
-      <button class="pill" data-filter="removed">Removed</button>
-      <input id="searchBox" type="text" placeholder="Søk på GUID eller RDS-kode…" />
-      <button id="exportBtn" class="btn btn-secondary" type="button">Eksporter CSV</button>
-    </div>
-
-    <div class="table-card">
-      <table>
-        <thead>
-          <tr>
-            <th style="width:22%;">GUID</th>
-            <th style="width:24%;">RDS eldre modell</th>
-            <th style="width:13%;">Resultat</th>
-            <th style="width:24%;">RDS ny modell</th>
-            <th style="width:17%;">Kommentar</th>
-          </tr>
-        </thead>
-        <tbody id="resultBody">
-          <tr><td colspan="5" class="muted">Ingen sammenligning kjørt ennå.</td></tr>
-        </tbody>
-      </table>
-      <div class="footer-note">
-        CSV-eksport sorteres etter GUID og tar med GUID + RDS-kode fra begge modellversjoner.
-      </div>
-    </div>
+<div class="wrap">
+  <div class="header">
+    <div class="logo-box"><img src="norconsult-logo-black.png" alt="Norconsult logo" /></div>
+    <div><h1 class="title">Trimble Connect IFC<br>RDS-tag sammenligning</h1><div class="subtitle">RDS Comparator V.7</div><div class="meta">Norconsult Norge<br>Developed by Norconsult (AI-assisted development). Kontaktperson: Edin.Dzakmic@norconsult.com</div></div>
   </div>
-
+  <div id="status" class="status">Starter extension og kobler til Trimble Connect…</div>
+  <div class="controls"><div class="control-grid">
+    <div class="field"><label for="oldModel">Eldre modellversjon</label><select id="oldModel"></select><div id="oldInfo" class="model-info"></div></div>
+    <div class="field"><label for="newModel">Ny modellversjon</label><select id="newModel"></select><div id="newInfo" class="model-info"></div></div>
+    <button id="refreshBtn" class="btn btn-secondary" type="button">Oppdater modeller</button>
+    <button id="compareBtn" class="btn btn-primary" type="button" disabled>Kjør sammenligning</button>
+  </div></div>
+  <div class="stats">
+    <div class="stat total"><div class="label">Total GUID-er</div><div id="statTotal" class="value">0</div></div>
+    <div class="stat new"><div class="label">New</div><div id="statNew" class="value">0</div></div>
+    <div class="stat removed"><div class="label">Removed</div><div id="statRemoved" class="value">0</div></div>
+    <div class="stat different"><div class="label">Different</div><div id="statDifferent" class="value">0</div></div>
+    <div class="stat equal"><div class="label">Equal GUID</div><div id="statEqual" class="value">0</div></div>
+    <div class="stat rdsmatch"><div class="label">Like RDS-koder</div><div id="statRdsEqual" class="value">0</div></div>
+  </div>
+  <div class="toolbar">
+    <button class="pill active" data-filter="all">Alle GUID</button>
+    <button class="pill" data-filter="rdsEqual">Like RDS-koder</button>
+    <button class="pill" data-filter="equal">Equal GUID</button>
+    <button class="pill" data-filter="different">Different</button>
+    <button class="pill" data-filter="new">New</button>
+    <button class="pill" data-filter="removed">Removed</button>
+    <input id="searchBox" type="text" placeholder="Søk på GUID eller RDS-kode…" />
+    <button id="exportBtn" class="btn btn-secondary" type="button">Eksporter CSV</button>
+  </div>
+  <div class="table-card"><table><thead><tr><th style="width:22%;">GUID / RDS-nøkkel</th><th style="width:24%;">RDS eldre modell</th><th style="width:13%;">Resultat</th><th style="width:24%;">RDS ny modell</th><th style="width:17%;">Kommentar</th></tr></thead><tbody id="resultBody"><tr><td colspan="5" class="muted">Ingen sammenligning kjørt ennå.</td></tr></tbody></table><div class="footer-note">V.7 viser både GUID-sammenligning og egen kontroll for like unike 01. RDS-tag mellom valgt eldre og ny modell. IFCPROJECT og andre IFC container-objekter filtreres bort før kontroll.</div></div>
+</div>
 <script>
 (() => {
   const PROPERTY_SET_NAME = '2_RDS';
   const PROPERTY_NAME = '01. RDS-tag';
+  const EXCLUDED_GUIDS = new Set(['30kjO4xtL0xAhtD3IkB3aA']);
+  const EXCLUDED_IFC_TYPES = new Set(['IFCPROJECT','IFCSITE','IFCBUILDING','IFCBUILDINGSTOREY','IFCSPACE','IFCZONE','IFCBUILDINGUNIT','IFCSPATIALZONE','IFCGROUP','IFCSYSTEM','IFCDISTRIBUTIONSYSTEM']);
 
-  let api = null;
-  let models = [];
-  let comparisonRows = [];
-  let activeFilter = 'all';
+  let api=null, models=[], comparisonRows=[], rdsMatchRows=[], activeFilter='all';
+  const $=id=>document.getElementById(id);
+  const statusEl=$('status'), oldModelEl=$('oldModel'), newModelEl=$('newModel'), oldInfoEl=$('oldInfo'), newInfoEl=$('newInfo'), compareBtn=$('compareBtn'), refreshBtn=$('refreshBtn'), exportBtn=$('exportBtn'), searchBox=$('searchBox'), resultBody=$('resultBody');
 
-  const statusEl = document.getElementById('status');
-  const oldModelEl = document.getElementById('oldModel');
-  const newModelEl = document.getElementById('newModel');
-  const oldInfoEl = document.getElementById('oldInfo');
-  const newInfoEl = document.getElementById('newInfo');
-  const compareBtn = document.getElementById('compareBtn');
-  const refreshBtn = document.getElementById('refreshBtn');
-  const exportBtn = document.getElementById('exportBtn');
-  const searchBox = document.getElementById('searchBox');
-  const resultBody = document.getElementById('resultBody');
+  function setStatus(message,tone='info'){statusEl.textContent=message;const s={error:['#fff1f1','#efc8c8','#9d2525'],success:['#eef9f1','#c7e6d0','#1e6b3d'],warn:['#fff7e8','#edd7a7','#8b5d00'],info:['#eef3fb','#c7d5f0','#35507a']}[tone]||['#eef3fb','#c7d5f0','#35507a'];statusEl.style.background=s[0];statusEl.style.borderColor=s[1];statusEl.style.color=s[2];}
+  function escapeHtml(v){return String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));}
+  function normalize(v){return String(v??'').trim().toLowerCase();}
+  function normRds(v){return String(v??'').trim();}
+  function formatDate(v){if(!v)return'';const d=new Date(v);return Number.isNaN(d.getTime())?String(v).slice(0,10):d.toISOString().slice(0,10);}
+  function csvEscape(v){const s=String(v??'');return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;}
+  function delay(ms){return new Promise(r=>setTimeout(r,ms));}
+  function getModelId(i){return i?.modelId||i?.id||i?.versionId||i?.fileId||null;}
+  function getModelName(i){return i?.name||i?.displayName||i?.fileName||i?.file?.name||i?.path?.split('/').pop()||i?.modelName||i?.id||'Ukjent modell';}
+  function getModelDate(i){return i?.modifiedOn||i?.updatedAt||i?.lastModified||i?.createdOn||i?.file?.modifiedOn||'';}
+  function getSelectedModelMeta(sel){return models.find(m=>m.id===sel.value)||null;}
 
-  function setStatus(message, tone = 'info') {
-    statusEl.textContent = message;
-    if (tone === 'error') {
-      statusEl.style.background = '#fff1f1';
-      statusEl.style.borderColor = '#efc8c8';
-      statusEl.style.color = '#9d2525';
-    } else if (tone === 'success') {
-      statusEl.style.background = '#eef9f1';
-      statusEl.style.borderColor = '#c7e6d0';
-      statusEl.style.color = '#1e6b3d';
-    } else if (tone === 'warn') {
-      statusEl.style.background = '#fff7e8';
-      statusEl.style.borderColor = '#edd7a7';
-      statusEl.style.color = '#8b5d00';
-    } else {
-      statusEl.style.background = '#eef3fb';
-      statusEl.style.borderColor = '#c7d5f0';
-      statusEl.style.color = '#35507a';
-    }
+  function updateSummary(rows){
+    $('statTotal').textContent=rows.length;
+    $('statEqual').textContent=rows.filter(r=>r.result==='equal').length;
+    $('statDifferent').textContent=rows.filter(r=>r.result==='different').length;
+    $('statNew').textContent=rows.filter(r=>r.result==='new').length;
+    $('statRemoved').textContent=rows.filter(r=>r.result==='removed').length;
+    $('statRdsEqual').textContent=rdsMatchRows.length;
+  }
+  function updateModelInfo(){const o=getSelectedModelMeta(oldModelEl), n=getSelectedModelMeta(newModelEl);oldInfoEl.textContent=o?`${o.objectCount??'-'} objekter${o.date?' · '+o.date:''}`:'';newInfoEl.textContent=n?`${n.objectCount??'-'} objekter${n.date?' · '+n.date:''}`:'';compareBtn.disabled=!(o&&n&&o.id!==n.id);}
+  function fillModelDropdowns(){const po=oldModelEl.value,pn=newModelEl.value;[oldModelEl,newModelEl].forEach(sel=>{sel.innerHTML='<option value="">— Velg modell —</option>';models.forEach(m=>{const opt=document.createElement('option');opt.value=m.id;opt.textContent=m.name;sel.appendChild(opt);});});if(models.some(m=>m.id===po))oldModelEl.value=po;if(models.some(m=>m.id===pn))newModelEl.value=pn;updateModelInfo();}
+  async function connectApi(){if(api)return api;if(!window.TrimbleConnectWorkspace?.connect)throw new Error('Trimble Connect Workspace API ble ikke lastet.');api=await window.TrimbleConnectWorkspace.connect(window.parent,()=>{});return api;}
+  async function readViewerGroups(state){if(!api?.viewer)return[];try{const res=await api.viewer.getObjects(undefined,state);return Array.isArray(res)?res:[]}catch(e){return[]}}
+  async function readVisibleModelsFromViewer(){await connectApi();for(let attempt=1;attempt<=10;attempt++){const visible=await readViewerGroups('visible'), all=await readViewerGroups(undefined), source=visible.length?visible:all;if(source.length){const unique=new Map();for(const g of source){const id=getModelId(g);if(!id||unique.has(id))continue;let meta=null;try{if(typeof api.viewer.getLoadedModel==='function')meta=await api.viewer.getLoadedModel(id)}catch(e){}unique.set(id,{id,name:getModelName(meta||g),date:formatDate(getModelDate(meta||g)),objectCount:Array.isArray(g?.objects)?g.objects.length:null});}const found=[...unique.values()].sort((a,b)=>a.name.localeCompare(b.name,'no'));if(found.length)return found;}setStatus(`Leter etter modeller i 3D-vinduet… forsøk ${attempt}/10`);await delay(700);}return[];}
+
+  function getPropertyValueFromSet(propertySets,setName,propName){const ws=normalize(setName), wp=normalize(propName);for(const ps of propertySets||[]){const sn=normalize(ps?.name||ps?.set||ps?.title);if(sn!==ws)continue;for(const p of ps?.properties||[]){if(normalize(p?.name||p?.property||p?.key)===wp)return String(p?.value??'').trim();}}return'';}
+  function getAnyPropertyValue(propertySets,names){const wanted=names.map(normalize);for(const ps of propertySets||[])for(const p of ps?.properties||[])if(wanted.includes(normalize(p?.name||p?.property||p?.key)))return String(p?.value??'').trim();return'';}
+  function getPropertyValue(propertySets){return getPropertyValueFromSet(propertySets,PROPERTY_SET_NAME,PROPERTY_NAME)||getAnyPropertyValue(propertySets,[PROPERTY_NAME]);}
+  function getObjectClass(row){return getPropertyValueFromSet(row?.properties,'0_Element','Objektklasse')||row?.class||row?.entity||row?.entityName||row?.type||row?.product?.class||row?.product?.entity||row?.product?.type||row?.product?.entityName||getAnyPropertyValue(row?.properties,['Objektklasse','IfcClass','Class','Entity','EntityName','ObjectClass'])||'';}
+  function getObjectType(row){return getPropertyValueFromSet(row?.properties,'0_Element','Objekttype')||row?.objectType||row?.productType||row?.predefinedType||row?.product?.objectType||row?.product?.productType||row?.product?.predefinedType||row?.product?.name||getAnyPropertyValue(row?.properties,['Objekttype','ObjectType','TypeName','PredefinedType','Type'])||'';}
+  function getIfcType(row){
+    return String(row?.ifcType||row?.ifcEntity||row?.entity||row?.entityName||row?.class||row?.type||row?.product?.entity||row?.product?.type||'').trim().toUpperCase();
   }
 
-  function escapeHtml(value) {
-    return String(value ?? '').replace(/[&<>"']/g, ch => ({
-      '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
-    }[ch]));
-  }
+  function hasExcludedIfcType(row){
+    const directType = getIfcType(row);
+    if (EXCLUDED_IFC_TYPES.has(directType)) return true;
 
-  function normalize(value) {
-    return String(value ?? '').trim().toLowerCase();
-  }
-
-  function formatDate(value) {
-    if (!value) return '';
-    const d = new Date(value);
-    if (Number.isNaN(d.getTime())) return String(value).slice(0, 10);
-    return d.toISOString().slice(0, 10);
-  }
-
-  function csvEscape(value) {
-    const s = String(value ?? '');
-    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
-  }
-
-  function delay(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  }
-
-  function getModelId(item) {
-    return item?.modelId || item?.id || item?.versionId || item?.fileId || null;
-  }
-
-  function getModelName(item) {
-    return (
-      item?.name ||
-      item?.displayName ||
-      item?.fileName ||
-      item?.file?.name ||
-      item?.path?.split('/').pop() ||
-      item?.modelName ||
-      item?.id ||
-      'Ukjent modell'
-    );
-  }
-
-  function getModelDate(item) {
-    return item?.modifiedOn || item?.updatedAt || item?.lastModified || item?.createdOn || item?.file?.modifiedOn || '';
-  }
-
-  function updateSummary(rows) {
-    const total = rows.length;
-    const equal = rows.filter(r => r.result === 'equal').length;
-    const different = rows.filter(r => r.result === 'different').length;
-    const newly = rows.filter(r => r.result === 'new').length;
-    const removed = rows.filter(r => r.result === 'removed').length;
-    document.getElementById('statTotal').textContent = total;
-    document.getElementById('statEqual').textContent = equal;
-    document.getElementById('statDifferent').textContent = different;
-    document.getElementById('statNew').textContent = newly;
-    document.getElementById('statRemoved').textContent = removed;
-  }
-
-  function getSelectedModelMeta(selectEl) {
-    const id = selectEl.value;
-    return models.find(m => m.id === id) || null;
-  }
-
-  function updateModelInfo() {
-    const oldMeta = getSelectedModelMeta(oldModelEl);
-    const newMeta = getSelectedModelMeta(newModelEl);
-
-    oldInfoEl.textContent = oldMeta ? `${oldMeta.objectCount ?? '-'} objekter${oldMeta.date ? ' · ' + oldMeta.date : ''}` : '';
-    newInfoEl.textContent = newMeta ? `${newMeta.objectCount ?? '-'} objekter${newMeta.date ? ' · ' + newMeta.date : ''}` : '';
-
-    compareBtn.disabled = !(oldMeta && newMeta && oldMeta.id !== newMeta.id);
-  }
-
-  function fillModelDropdowns() {
-    const previousOld = oldModelEl.value;
-    const previousNew = newModelEl.value;
-
-    [oldModelEl, newModelEl].forEach(sel => {
-      sel.innerHTML = '<option value="">— Velg modell —</option>';
-      models.forEach(model => {
-        const opt = document.createElement('option');
-        opt.value = model.id;
-        opt.textContent = model.name;
-        sel.appendChild(opt);
-      });
-    });
-
-    if (models.some(m => m.id === previousOld)) oldModelEl.value = previousOld;
-    if (models.some(m => m.id === previousNew)) newModelEl.value = previousNew;
-
-    updateModelInfo();
-  }
-
-  async function connectApi() {
-    if (api) return api;
-    if (!window.TrimbleConnectWorkspace || typeof window.TrimbleConnectWorkspace.connect !== 'function') {
-      throw new Error('Trimble Connect Workspace API ble ikke lastet.');
-    }
-
-    api = await window.TrimbleConnectWorkspace.connect(window.parent, () => {});
-    return api;
-  }
-
-  async function readViewerGroups(state) {
-    if (!api?.viewer) return [];
-    try {
-      const res = await api.viewer.getObjects(undefined, state);
-      return Array.isArray(res) ? res : [];
-    } catch (e) {
-      return [];
-    }
-  }
-
-  async function readVisibleModelsFromViewer() {
-    await connectApi();
-
-    for (let attempt = 1; attempt <= 10; attempt++) {
-      const visibleGroups = await readViewerGroups('visible');
-      const allGroups = await readViewerGroups(undefined);
-      const source = visibleGroups.length ? visibleGroups : allGroups;
-
-      if (source.length) {
-        const unique = new Map();
-
-        for (const group of source) {
-          const modelId = getModelId(group);
-          if (!modelId || unique.has(modelId)) continue;
-
-          let loadedMeta = null;
-          try {
-            if (typeof api.viewer.getLoadedModel === 'function') {
-              loadedMeta = await api.viewer.getLoadedModel(modelId);
-            }
-          } catch (e) {}
-
-          unique.set(modelId, {
-            id: modelId,
-            name: getModelName(loadedMeta || group),
-            date: formatDate(getModelDate(loadedMeta || group)),
-            objectCount: Array.isArray(group?.objects) ? group.objects.length : null
-          });
-        }
-
-        const found = [...unique.values()].sort((a, b) => a.name.localeCompare(b.name, 'no'));
-        if (found.length) return found;
-      }
-
-      setStatus(`Leter etter modeller i 3D-vinduet… forsøk ${attempt}/10`, 'info');
-      await delay(700);
-    }
-
-    return [];
-  }
-
-  function getPropertyValue(propertySets) {
-    const wantedSet = normalize(PROPERTY_SET_NAME);
-    const wantedProp = normalize(PROPERTY_NAME);
-
-    for (const pset of propertySets || []) {
-      const setName = normalize(pset?.name || pset?.set || pset?.title);
-      if (setName !== wantedSet) continue;
-
-      for (const prop of pset?.properties || []) {
-        const propName = normalize(prop?.name || prop?.property || prop?.key);
-        if (propName === wantedProp) {
-          return String(prop?.value ?? '').trim();
-        }
+    // Trimble Connect returnerer ikke alltid IFC-type som eget felt.
+    // Derfor sjekkes også properties for verdier som IFCPROJECT, IFCSITE osv.
+    for (const ps of row?.properties || []) {
+      for (const p of ps?.properties || []) {
+        const value = String(p?.value ?? '').trim().toUpperCase();
+        const name = String(p?.name ?? p?.property ?? p?.key ?? '').trim().toLowerCase();
+        if (EXCLUDED_IFC_TYPES.has(value)) return true;
+        if ((name.includes('ifc') || name.includes('entity') || name.includes('class') || name.includes('type')) && EXCLUDED_IFC_TYPES.has(value)) return true;
       }
     }
 
-    // Fallback: look for property name regardless of set
-    for (const pset of propertySets || []) {
-      for (const prop of pset?.properties || []) {
-        const propName = normalize(prop?.name || prop?.property || prop?.key);
-        if (propName === wantedProp) {
-          return String(prop?.value ?? '').trim();
-        }
-      }
+    return false;
+  }
+  async function getModelGroup(modelId){const groups=await readViewerGroups(undefined);return groups.find(g=>getModelId(g)===modelId)||null;}
+  async function readObjectIds(modelId,runtimeIds){if(!api?.viewer||typeof api.viewer.convertToObjectIds!=='function')return runtimeIds.map(String);const out=[];for(let i=0;i<runtimeIds.length;i+=500){const chunk=runtimeIds.slice(i,i+500);try{const ids=await api.viewer.convertToObjectIds(modelId,chunk);out.push(...(Array.isArray(ids)?ids:chunk.map(String)));}catch(e){out.push(...chunk.map(String));}}return out;}
+  async function readProperties(modelId,runtimeIds){const out=[];for(let i=0;i<runtimeIds.length;i+=200){const chunk=runtimeIds.slice(i,i+200);const res=await api.viewer.getObjectProperties(modelId,chunk);if(Array.isArray(res))out.push(...res);}return out;}
+
+  async function collectModelData(modelId){
+    const group=await getModelGroup(modelId), objects=Array.isArray(group?.objects)?group.objects:[], runtimeIds=objects.map(o=>o?.id).filter(v=>Number.isFinite(v));
+    if(!runtimeIds.length)return[];
+    const [objectIds,properties]=await Promise.all([readObjectIds(modelId,runtimeIds),readProperties(modelId,runtimeIds)]);
+    const rows=[];
+    for(let i=0;i<properties.length;i++){
+      const propRow=properties[i], guid=String(objectIds[i]??propRow?.objectId??propRow?.id??propRow?.guid??'').trim();
+      const ifcType=getIfcType(propRow);
+
+      // Filtrer vekk IFCPROJECT og andre container-/systemobjekter før kontrollen.
+      // Dette hindrer at prosjekt-GUID, f.eks. 30kjO4xtL0xAhtD3IkB3aA, kommer med i resultatlisten.
+      if(EXCLUDED_GUIDS.has(guid) || hasExcludedIfcType(propRow)) continue;
+
+      const rds=normRds(getPropertyValue(propRow?.properties)), objectClass=String(getObjectClass(propRow)||'').trim(), objectType=String(getObjectType(propRow)||'').trim();
+      if(guid||rds||objectClass||objectType)rows.push({guid,rds,objectClass,objectType,ifcType});
     }
-
-    return '';
-  }
-
-  function getAnyPropertyValue(propertySets, candidateNames) {
-    const wanted = candidateNames.map(normalize);
-    for (const pset of propertySets || []) {
-      for (const prop of pset?.properties || []) {
-        const propName = normalize(prop?.name || prop?.property || prop?.key);
-        if (wanted.includes(propName)) {
-          return String(prop?.value ?? '').trim();
-        }
-      }
-    }
-    return '';
-  }
-
-  function getPropertyValueFromSet(propertySets, targetSetName, targetPropName) {
-    const wantedSet = normalize(targetSetName);
-    const wantedProp = normalize(targetPropName);
-
-    for (const pset of propertySets || []) {
-      const setName = normalize(pset?.name || pset?.set || pset?.title);
-      if (setName !== wantedSet) continue;
-
-      for (const prop of pset?.properties || []) {
-        const propName = normalize(prop?.name || prop?.property || prop?.key);
-        if (propName === wantedProp) {
-          return String(prop?.value ?? '').trim();
-        }
-      }
-    }
-
-    return '';
-  }
-
-  function getObjectClass(propRow) {
-    const fromZeroElement = getPropertyValueFromSet(propRow?.properties, '0_Element', 'Objektklasse');
-    if (fromZeroElement) return fromZeroElement;
-
-    const classFromRow =
-      propRow?.class ||
-      propRow?.entity ||
-      propRow?.entityName ||
-      propRow?.type ||
-      propRow?.product?.class ||
-      propRow?.product?.entity ||
-      propRow?.product?.type ||
-      propRow?.product?.entityName ||
-      '';
-
-    if (String(classFromRow).trim()) return String(classFromRow).trim();
-
-    const classFromProps = getAnyPropertyValue(propRow?.properties, [
-      'Objektklasse',
-      'IfcClass',
-      'Class',
-      'Entity',
-      'EntityName',
-      'ObjectClass'
-    ]);
-
-    return classFromProps || '';
-  }
-
-  function getObjectType(propRow) {
-    const fromZeroElement = getPropertyValueFromSet(propRow?.properties, '0_Element', 'Objekttype');
-    if (fromZeroElement) return fromZeroElement;
-
-    const typeFromRow =
-      propRow?.objectType ||
-      propRow?.productType ||
-      propRow?.predefinedType ||
-      propRow?.product?.objectType ||
-      propRow?.product?.productType ||
-      propRow?.product?.predefinedType ||
-      propRow?.product?.name ||
-      '';
-
-    if (String(typeFromRow).trim()) return String(typeFromRow).trim();
-
-    const typeFromProps = getAnyPropertyValue(propRow?.properties, [
-      'Objekttype',
-      'ObjectType',
-      'TypeName',
-      'PredefinedType',
-      'Type'
-    ]);
-
-    return typeFromProps || '';
-  }
-
-  async function getModelGroup(modelId) {
-    const groups = await readViewerGroups(undefined);
-    return groups.find(g => getModelId(g) === modelId) || null;
-  }
-
-  async function readObjectIds(modelId, runtimeIds) {
-    if (!api?.viewer) return runtimeIds.map(String);
-
-    if (typeof api.viewer.convertToObjectIds !== 'function') {
-      return runtimeIds.map(String);
-    }
-
-    const out = [];
-    const chunkSize = 500;
-    for (let i = 0; i < runtimeIds.length; i += chunkSize) {
-      const chunk = runtimeIds.slice(i, i + chunkSize);
-      try {
-        const ids = await api.viewer.convertToObjectIds(modelId, chunk);
-        if (Array.isArray(ids)) out.push(...ids);
-      } catch (e) {
-        out.push(...chunk.map(String));
-      }
-    }
-    return out;
-  }
-
-  async function readProperties(modelId, runtimeIds) {
-    const out = [];
-    const chunkSize = 200;
-    for (let i = 0; i < runtimeIds.length; i += chunkSize) {
-      const chunk = runtimeIds.slice(i, i + chunkSize);
-      const res = await api.viewer.getObjectProperties(modelId, chunk);
-      if (Array.isArray(res)) out.push(...res);
-    }
-    return out;
-  }
-
-  async function collectModelData(modelId) {
-    const group = await getModelGroup(modelId);
-    const objects = Array.isArray(group?.objects) ? group.objects : [];
-    const runtimeIds = objects.map(o => o?.id).filter(v => Number.isFinite(v));
-
-    if (!runtimeIds.length) return [];
-
-    const [objectIds, properties] = await Promise.all([
-      readObjectIds(modelId, runtimeIds),
-      readProperties(modelId, runtimeIds)
-    ]);
-
-    const rows = [];
-    for (let i = 0; i < properties.length; i++) {
-      const propRow = properties[i];
-      const guid = String(
-        objectIds[i] ??
-        propRow?.objectId ??
-        propRow?.id ??
-        propRow?.guid ??
-        ''
-      ).trim();
-
-      const rds = getPropertyValue(propRow?.properties);
-      const objectClass = getObjectClass(propRow);
-      const objectType = getObjectType(propRow);
-      if (guid || rds || objectClass || objectType) {
-        rows.push({ guid, rds, objectClass, objectType });
-      }
-    }
-
     return rows;
   }
 
-  function compareByGuid(oldRows, newRows) {
-    const oldMap = new Map(oldRows.map(r => [r.guid, r]));
-    const newMap = new Map(newRows.map(r => [r.guid, r]));
-    const unionGuids = new Set([...oldMap.keys(), ...newMap.keys()]);
-    const rows = [];
-
-    for (const guid of unionGuids) {
-      const oldRow = oldMap.get(guid) || null;
-      const newRow = newMap.get(guid) || null;
-
-      let result = '';
-      let comment = '';
-
-      if (oldRow && newRow) {
-        if ((oldRow.rds || '') === (newRow.rds || '')) {
-          result = 'equal';
-          comment = 'Equal - samme GUID og samme RDS-kode';
-        } else {
-          result = 'different';
-          comment = 'Different - samme GUID, men ulik RDS-kode';
-        }
-      } else if (!oldRow && newRow) {
-        result = 'new';
-        comment = 'New - finnes kun i ny revisjon';
-      } else {
-        result = 'removed';
-        comment = 'Removed - finnes kun i eldre revisjon';
-      }
-
-      rows.push({
-        guid,
-        oldGuid: oldRow?.guid || '',
-        newGuid: newRow?.guid || '',
-        oldRds: oldRow?.rds || '',
-        newRds: newRow?.rds || '',
-        oldObjectClass: oldRow?.objectClass || '',
-        oldObjectType: oldRow?.objectType || '',
-        newObjectClass: newRow?.objectClass || '',
-        newObjectType: newRow?.objectType || '',
-        result,
-        comment
-      });
+  function compareByGuid(oldRows,newRows){
+    const oldMap=new Map(oldRows.filter(r=>r.guid&&!EXCLUDED_GUIDS.has(r.guid)).map(r=>[r.guid,r]));
+    const newMap=new Map(newRows.filter(r=>r.guid&&!EXCLUDED_GUIDS.has(r.guid)).map(r=>[r.guid,r]));
+    const rows=[];
+    for(const guid of new Set([...oldMap.keys(),...newMap.keys()])){
+      const o=oldMap.get(guid)||null,n=newMap.get(guid)||null;let result,comment;
+      if(o&&n){if((o.rds||'')===(n.rds||'')){result='equal';comment='Equal GUID - samme GUID og samme RDS-kode';}else{result='different';comment='Different - samme GUID, men ulik RDS-kode';}}
+      else if(!o&&n){result='new';comment='New - finnes kun i ny revisjon';}
+      else{result='removed';comment='Removed - finnes kun i eldre revisjon';}
+      rows.push({guid,oldGuid:o?.guid||'',newGuid:n?.guid||'',oldRds:o?.rds||'',newRds:n?.rds||'',oldObjectClass:o?.objectClass||'',oldObjectType:o?.objectType||'',newObjectClass:n?.objectClass||'',newObjectType:n?.objectType||'',result,comment});
     }
-
-    rows.sort((a, b) => a.guid.localeCompare(b.guid, 'no'));
-    return rows;
+    return rows.sort((a,b)=>a.guid.localeCompare(b.guid,'no'));
   }
 
-  function badgeHtml(result) {
-    if (result === 'equal') return '<span class="badge b-equal">Equal</span>';
-    if (result === 'different') return '<span class="badge b-different">Different</span>';
-    if (result === 'new') return '<span class="badge b-new">New</span>';
-    return '<span class="badge b-removed">Removed</span>';
+  function compareByRds(oldRows,newRows){
+    const oldMap=new Map(), newMap=new Map();
+    oldRows.filter(r=>r.rds).forEach(r=>{if(!oldMap.has(r.rds))oldMap.set(r.rds,[]);oldMap.get(r.rds).push(r);});
+    newRows.filter(r=>r.rds).forEach(r=>{if(!newMap.has(r.rds))newMap.set(r.rds,[]);newMap.get(r.rds).push(r);});
+    return [...oldMap.keys()].filter(tag=>newMap.has(tag)).sort((a,b)=>a.localeCompare(b,'no')).map(tag=>({
+      guid:tag, oldGuid:(oldMap.get(tag)||[]).map(r=>r.guid).filter(Boolean).join(' | '), newGuid:(newMap.get(tag)||[]).map(r=>r.guid).filter(Boolean).join(' | '),
+      oldRds:tag, newRds:tag, oldObjectClass:`${oldMap.get(tag).length} objekt(er)`, newObjectClass:`${newMap.get(tag).length} objekt(er)`, result:'rdsEqual', comment:`Like RDS-kode i begge modeller (${oldMap.get(tag).length} eldre / ${newMap.get(tag).length} ny)`
+    }));
   }
 
-  function getVisibleRows() {
-    const q = normalize(searchBox.value);
-    return comparisonRows.filter(row => {
-      if (activeFilter !== 'all' && row.result !== activeFilter) return false;
-      if (!q) return true;
-      const haystack = normalize([
-        row.guid,
-        row.oldRds,
-        row.newRds,
-        row.oldObjectClass,
-        row.oldObjectType,
-        row.newObjectClass,
-        row.newObjectType,
-        row.comment
-      ].join(' '));
-      return haystack.includes(q);
-    });
+  function badgeHtml(result){if(result==='rdsEqual')return'<span class="badge b-rds">Like RDS</span>';if(result==='equal')return'<span class="badge b-equal">Equal</span>';if(result==='different')return'<span class="badge b-different">Different</span>';if(result==='new')return'<span class="badge b-new">New</span>';return'<span class="badge b-removed">Removed</span>';}
+  function getVisibleRows(){const q=normalize(searchBox.value), source=activeFilter==='rdsEqual'?rdsMatchRows:comparisonRows;return source.filter(row=>{if(activeFilter!=='all'&&activeFilter!=='rdsEqual'&&row.result!==activeFilter)return false;if(!q)return true;return normalize([row.guid,row.oldRds,row.newRds,row.oldObjectClass,row.oldObjectType,row.newObjectClass,row.newObjectType,row.comment].join(' ')).includes(q);});}
+  function renderTable(){const rows=getVisibleRows();if(!rows.length){resultBody.innerHTML='<tr><td colspan="5" class="muted">Ingen treff for valgt filter/søk.</td></tr>';return;}resultBody.innerHTML=rows.map(row=>`<tr><td class="mono">${escapeHtml(row.guid)}</td><td class="mono">${row.oldRds?escapeHtml(row.oldRds):'<span class="muted">—</span>'}</td><td>${badgeHtml(row.result)}</td><td class="mono">${row.newRds?escapeHtml(row.newRds):'<span class="muted">—</span>'}</td><td>${escapeHtml(row.comment)}</td></tr>`).join('');}
+
+  async function refreshModels(){try{compareBtn.disabled=true;setStatus('Kobler til Trimble Connect og leser modellene som vises i 3D-vinduet…');models=await readVisibleModelsFromViewer();fillModelDropdowns();setStatus(models.length?`Fant ${models.length} modell${models.length===1?'':'er'} i 3D-vinduet. Velg eldre og ny revisjon for sammenligning.`:'Fant ingen modeller i 3D-vinduet. Kontroller at modellene er åpne/synlige og prøv igjen.',models.length?'success':'warn');}catch(err){console.error(err);setStatus(`Feil ved lesing av modeller: ${err?.message||err}`,'error');}}
+  async function runComparison(){
+    const oldId=oldModelEl.value,newId=newModelEl.value;if(!oldId||!newId||oldId===newId){setStatus('Velg to ulike modeller før du kjører sammenligning.','warn');return;}
+    try{compareBtn.disabled=true;setStatus('Leser objekter og RDS-koder fra valgte modeller…');
+      const [oldRows,newRows]=await Promise.all([collectModelData(oldId),collectModelData(newId)]);
+      comparisonRows=compareByGuid(oldRows,newRows);rdsMatchRows=compareByRds(oldRows,newRows);updateSummary(comparisonRows);renderTable();
+      const eq=comparisonRows.filter(r=>r.result==='equal').length,diff=comparisonRows.filter(r=>r.result==='different').length,nw=comparisonRows.filter(r=>r.result==='new').length,rem=comparisonRows.filter(r=>r.result==='removed').length;
+      setStatus(`Sammenligning ferdig. Total GUID-er: ${comparisonRows.length}, New: ${nw}, Removed: ${rem}, Different: ${diff}, Equal GUID: ${eq}. Like unike RDS-koder mellom modellene: ${rdsMatchRows.length}.`,'success');
+    }catch(err){console.error(err);setStatus(`Feil under sammenligning: ${err?.message||err}`,'error');}finally{updateModelInfo();}
+  }
+  function exportCsv(){
+    const rows=getVisibleRows().slice().sort((a,b)=>a.guid.localeCompare(b.guid,'no'));if(!rows.length){setStatus('Det finnes ingen rader å eksportere.','warn');return;}
+    const oldName=oldModelEl.selectedOptions[0]?.textContent||'Eldre_Modell', newName=newModelEl.selectedOptions[0]?.textContent||'Ny_Modell';
+    const lines=[['GUID_Eldre_Modell','Objektklasse_Eldre_Modell ('+oldName+')','Objekttype_Eldre_Modell ('+oldName+')','RDS_Eldre_Modell ('+oldName+')','GUID_Ny_Modell','Objektklasse_Ny_Modell ('+newName+')','Objekttype_Ny_Modell ('+newName+')','RDS_Ny_Modell ('+newName+')','Resultat','Kommentar'].join(',')];
+    rows.forEach(r=>lines.push([csvEscape(r.oldGuid),csvEscape(r.oldObjectClass),csvEscape(r.oldObjectType),csvEscape(r.oldRds),csvEscape(r.newGuid),csvEscape(r.newObjectClass),csvEscape(r.newObjectType),csvEscape(r.newRds),csvEscape(r.result),csvEscape(r.comment)].join(',')));
+    const blob=new Blob([lines.join('\n')],{type:'text/csv;charset=utf-8;'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=activeFilter==='rdsEqual'?'rds_like_koder.csv':'rds_guid_sammenligning.csv';a.click();URL.revokeObjectURL(url);
   }
 
-  function renderTable() {
-    const rows = getVisibleRows();
-    if (!rows.length) {
-      resultBody.innerHTML = '<tr><td colspan="5" class="muted">Ingen treff for valgt filter/søk.</td></tr>';
-      return;
-    }
-
-    resultBody.innerHTML = rows.map(row => `
-      <tr>
-        <td class="mono">${escapeHtml(row.guid)}</td>
-        <td class="mono">${row.oldRds ? escapeHtml(row.oldRds) : '<span class="muted">—</span>'}</td>
-        <td>${badgeHtml(row.result)}</td>
-        <td class="mono">${row.newRds ? escapeHtml(row.newRds) : '<span class="muted">—</span>'}</td>
-        <td>${escapeHtml(row.comment)}</td>
-      </tr>
-    `).join('');
-  }
-
-  async function refreshModels() {
-    try {
-      compareBtn.disabled = true;
-      setStatus('Kobler til Trimble Connect og leser modellene som vises i 3D-vinduet…', 'info');
-
-      models = await readVisibleModelsFromViewer();
-      fillModelDropdowns();
-
-      if (models.length) {
-        setStatus(`Fant ${models.length} modell${models.length === 1 ? '' : 'er'} i 3D-vinduet. Velg eldre og ny revisjon for sammenligning.`, 'success');
-      } else {
-        setStatus('Fant ingen modeller i 3D-vinduet. Kontroller at modellene er åpne/synlige og prøv igjen.', 'warn');
-      }
-    } catch (err) {
-      console.error(err);
-      setStatus(`Feil ved lesing av modeller: ${err?.message || err}`, 'error');
-    }
-  }
-
-  async function runComparison() {
-    const oldId = oldModelEl.value;
-    const newId = newModelEl.value;
-
-    if (!oldId || !newId || oldId === newId) {
-      setStatus('Velg to ulike modeller før du kjører sammenligning.', 'warn');
-      return;
-    }
-
-    try {
-      compareBtn.disabled = true;
-      setStatus('Leser objekter og RDS-koder fra valgte modeller…', 'info');
-
-      const [oldRows, newRows] = await Promise.all([
-        collectModelData(oldId),
-        collectModelData(newId)
-      ]);
-
-      comparisonRows = compareByGuid(oldRows, newRows);
-      updateSummary(comparisonRows);
-      renderTable();
-
-      const equalCount = comparisonRows.filter(r => r.result === 'equal').length;
-      const differentCount = comparisonRows.filter(r => r.result === 'different').length;
-      const newCount = comparisonRows.filter(r => r.result === 'new').length;
-
-      const removedCount = comparisonRows.filter(r => r.result === 'removed').length;
-      setStatus(`Sammenligning ferdig. Total GUID-er: ${comparisonRows.length}, New: ${newCount}, Removed: ${removedCount}, Different: ${differentCount}, Equal: ${equalCount}.`, 'success');
-    } catch (err) {
-      console.error(err);
-      setStatus(`Feil under sammenligning: ${err?.message || err}`, 'error');
-    } finally {
-      updateModelInfo();
-    }
-  }
-
-  function exportCsv() {
-    const rows = getVisibleRows().slice().sort((a, b) => a.guid.localeCompare(b.guid, 'no'));
-    if (!rows.length) {
-      setStatus('Det finnes ingen rader å eksportere.', 'warn');
-      return;
-    }
-
-    const lines = [];
-    const oldModelName = document.getElementById('oldModel').selectedOptions[0]?.textContent || 'Eldre_Modell';
-    const newModelName = document.getElementById('newModel').selectedOptions[0]?.textContent || 'Ny_Modell';
-
-    lines.push([
-      'GUID_Eldre_Modell',
-      'Objektklasse_Eldre_Modell (' + oldModelName + ')',
-      'Objekttype_Eldre_Modell (' + oldModelName + ')',
-      'RDS_Eldre_Modell (' + oldModelName + ')',
-      'GUID_Ny_Modell',
-      'Objektklasse_Ny_Modell (' + newModelName + ')',
-      'Objekttype_Ny_Modell (' + newModelName + ')',
-      'RDS_Ny_Modell (' + newModelName + ')',
-      'Resultat',
-      'Kommentar'
-    ].join(','));
-
-    rows.forEach(row => {
-      lines.push([
-        csvEscape(row.oldGuid),
-        csvEscape(row.oldObjectClass),
-        csvEscape(row.oldObjectType),
-        csvEscape(row.oldRds),
-        csvEscape(row.newGuid),
-        csvEscape(row.newObjectClass),
-        csvEscape(row.newObjectType),
-        csvEscape(row.newRds),
-        csvEscape(row.result),
-        csvEscape(row.comment)
-      ].join(','));
-    });
-
-    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'rds_guid_sammenligning.csv';
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
-  document.querySelectorAll('.pill').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.pill').forEach(x => x.classList.remove('active'));
-      btn.classList.add('active');
-      activeFilter = btn.dataset.filter;
-      renderTable();
-    });
-  });
-
-  oldModelEl.addEventListener('change', updateModelInfo);
-  newModelEl.addEventListener('change', updateModelInfo);
-  refreshBtn.addEventListener('click', refreshModels);
-  compareBtn.addEventListener('click', runComparison);
-  exportBtn.addEventListener('click', exportCsv);
-  searchBox.addEventListener('input', renderTable);
-
-  window.addEventListener('load', async () => {
-    await refreshModels();
-  });
+  document.querySelectorAll('.pill').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('.pill').forEach(x=>x.classList.remove('active'));btn.classList.add('active');activeFilter=btn.dataset.filter;renderTable();}));
+  oldModelEl.addEventListener('change',updateModelInfo);newModelEl.addEventListener('change',updateModelInfo);refreshBtn.addEventListener('click',refreshModels);compareBtn.addEventListener('click',runComparison);exportBtn.addEventListener('click',exportCsv);searchBox.addEventListener('input',renderTable);window.addEventListener('load',refreshModels);
 })();
 </script>
 </body>
